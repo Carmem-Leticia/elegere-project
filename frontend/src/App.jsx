@@ -92,7 +92,6 @@ function App() {
     }
   };
 
-  // NOVA FUNÇÃO: Remover Livro da Estante
   const removerLivro = async (bookId) => {
     if (!window.confirm("Tem certeza que deseja remover este livro da sua estante? O progresso será perdido.")) return;
     
@@ -103,7 +102,6 @@ function App() {
         headers: { Authorization: `Bearer ${token}` }
       });
       
-      // Recarrega os dados após deletar para atualizar a tela
       await carregarDados(); 
       alert('Livro removido da sua estante!');
     } catch (err) {
