@@ -128,7 +128,7 @@ function App() {
       await api.post('/progress', { book_id: bookId, current_chapter: 1 }, getConfig());
       alert('Livro adicionado à sua estante!');
       carregarDados();
-    } catch (err) { alert(`Falha ao adicionar: ${err.response?.data?.message || err.message}`); }
+    } catch (err) { alert(`Falha ao adicionar: ${err.response?.data?.error || err.response?.data?.message || err.message}`); }
   };
 
   const atualizarCapitulo = async (bookId, novoCapitulo) => {
@@ -176,7 +176,7 @@ function App() {
       }
 
       const textoAvaliacoes = avaliacoesDoLivro.map(r => 
-        `Nota: ${r.rating} ⭐\nComentário: ${r.review_text}`
+        `Usuário: ${r.user_name || 'Anônimo'}\nNota: ${r.rating} ⭐\nComentário: ${r.review_text}`
       ).join('\n\n---\n\n');
       
       alert(`AVALIAÇÕES:\n\n${textoAvaliacoes}`);
@@ -259,7 +259,19 @@ function App() {
               <div key={livro.id} style={styles.listCard}>
                 <div style={{flex: 1}}>
                   <h4 style={{margin: '0 0 5px'}}>{livro.title}</h4>
-                  <p style={{margin: 0, fontSize: '12px', color: '#94a3b8'}}>{livro.author}</p>
+                  <p style={{margin: 0, fontSize: '12px', color: '#94a3b8', marginBottom: '8px'}}>{livro.author}</p>
+                  
+                  <div style={{display: 'flex', gap: '8px'}}>
+                    <span style={{ fontSize: '10px', background: 'rgba(99, 102, 241, 0.2)', padding: '3px 8px', borderRadius: '12px', color: '#818cf8', fontWeight: 'bold' }}>
+                      {livro.category_name || 'Geral'}
+                    </span>
+                    {livro.difficulty_level && (
+                      <span style={{ fontSize: '10px', background: 'rgba(245, 158, 11, 0.2)', padding: '3px 8px', borderRadius: '12px', color: '#fbbf24', fontWeight: 'bold' }}>
+                        Nível: {livro.difficulty_level}
+                      </span>
+                    )}
+                  </div>
+
                 </div>
                 <div style={{display: 'flex', gap: '8px'}}>
                   <button onClick={() => adicionarAEstante(livro.id)} style={styles.iconBtn} title="Add Estante"><Check size={18} color="#10b981"/></button>
