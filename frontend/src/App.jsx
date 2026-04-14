@@ -1,16 +1,32 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   BookOpen, Mail, Lock, ChevronRight, BookMarked, 
-  User, LogOut, Library, Star, Eye, EyeOff, Home, LayoutGrid, Trash2 
+  User, LogOut, Library, Star, Eye, EyeOff,
+  Home, Play, Sparkles, Flame, Plus, Trash2, Edit2, Check, MessageSquare
 } from 'lucide-react';
 import api from './services/api';
+
+const GlobalStyle = () => (
+  <style>
+    {`
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+      body, html, #root { margin: 0; padding: 0; width: 100%; min-height: 100vh; background-color: #0b1120; font-family: 'Inter', sans-serif; color: #fff; box-sizing: border-box; }
+      * { box-sizing: border-box; }
+      /* Adicionando um scrollbar suave e visível apenas quando necessário */
+      ::-webkit-scrollbar { width: 6px; height: 6px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+      .truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .hide-scroll::-webkit-scrollbar { display: none; } /* Oculta a barra apenas nos destaques */
+    `}
+  </style>
+);
 
 function App() {
   const [user, setUser] = useState(null);
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
-  
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -24,280 +40,340 @@ function App() {
     const savedUser = localStorage.getItem('userName');
     const token = localStorage.getItem('token');
     if (savedUser && token) {
-      setUser({ name: savedUser });
+      setUser({ name: savedUser, initials: savedUser.substring(0, 2).toUpperCase() });
     }
-  }, []);
-
-  const handleLogout = useCallback(() => {
-    localStorage.clear();
-    setUser(null);
-    setEmail('');
-    setPassword('');
-    setName('');
-    setShowPassword(false);
-    setCurrentTab('inicio');
-    setMessage({ text: 'Sessão encerrada.', type: 'success' });
   }, []);
 
   const carregarDados = useCallback(async () => {
     try {
-      setLoading(true);
       const token = localStorage.getItem('token');
-      const config = { 
-        headers: { 
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json' 
-        } 
-      };
+      const config = { headers: { 'Authorization': `Bearer ${token}` } };
       
       const resBooks = await api.get('/books', config);
       if (resBooks.data) setCatalogo(resBooks.data);
 
-      try {
-        const resLib = await api.get('/progress', config);
-        if (resLib.data) setMinhaLista(resLib.data);
-      } catch (err) {
-        console.warn("Nenhum livro na biblioteca ainda ou erro na rota /progress.", err);
-        setMinhaLista([]);
-      }
-
+      const resLib = await api.get('/progress', config);
+      if (resLib.data) setMinhaLista(resLib.data);
     } catch (error) {
-      console.error("Erro ao buscar dados da API", error);
-      if (error.response?.status === 401) {
-        handleLogout(); 
-      }
-    } finally {
-      setLoading(false);
+      console.warn("Erro ao carregar dados.", error);
     }
-  }, [handleLogout]);
+  }, []);
 
   useEffect(() => {
-    if (user) {
-      carregarDados();
-    }
+    if (user) carregarDados();
   }, [user, carregarDados]);
-
-  const adicionarLivro = async (bookId) => {
-    try {
-      const token = localStorage.getItem('token');
-      await api.post('/progress', { book_id: bookId }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      alert('Livro adicionado à sua biblioteca!');
-      carregarDados(); 
-      setCurrentTab('inicio'); 
-    } catch (err) {
-      console.error('Erro ao adicionar livro:', err);
-      alert('Você já está lendo este livro ou ocorreu um erro.');
-    }
-  };
-
-  const removerLivro = async (bookId) => {
-    if (!window.confirm("Tem certeza que deseja remover este livro da sua estante? O progresso será perdido.")) return;
-    
-    try {
-      setLoading(true);
-      const token = localStorage.getItem('token');
-      await api.delete(`/progress/${bookId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      await carregarDados(); 
-      alert('Livro removido da sua estante!');
-    } catch (err) {
-      console.error('Erro ao remover livro:', err);
-      alert('Erro ao tentar remover o livro.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleAuth = async (e) => {
     e.preventDefault();
     setLoading(true);
     setMessage({ text: '', type: '' });
-
     try {
       if (isLogin) {
         const response = await api.post('/auth/login', { email, password });
-        const { token, user: userData } = response.data;
-
-        localStorage.setItem('token', token);
-        localStorage.setItem('userName', userData.name);
-        
-        setMessage({ text: `Bem-vindo, ${userData.name}!`, type: 'success' });
-        
-        setTimeout(() => {
-          setUser({ name: userData.name });
-        }, 1000);
-
+        localStorage.setItem('token', response.data.token);
+        localStorage.setItem('userName', response.data.user.name);
+        setMessage({ text: `Bem-vindo!`, type: 'success' });
+        setTimeout(() => setUser({ name: response.data.user.name, initials: response.data.user.name.substring(0, 2).toUpperCase() }), 1000);
       } else {
         await api.post('/auth/register', { name, email, password });
-        setMessage({ text: 'Conta criada com sucesso! Faça login.', type: 'success' });
-        
-        setName('');
-        setPassword(''); 
+        setMessage({ text: 'Conta criada! Faça login.', type: 'success' });
         setIsLogin(true);
       }
     } catch (err) {
-      setMessage({ 
-        text: err.response?.data?.message || err.response?.data?.error || 'Erro na conexão com o servidor.', 
-        type: 'error' 
-      });
+      setMessage({ text: err.response?.data?.message || 'Erro na conexão.', type: 'error' });
     } finally {
       setLoading(false);
     }
   };
 
-  const GlobalStyle = () => (
-    <style>
-      {`
-        body, html, #root {
-          margin: 0;
-          padding: 0;
-          width: 100%;
-          min-height: 100vh;
-          background-color: #0f172a;
-          box-sizing: border-box;
-          font-family: 'Inter', sans-serif;
-          color: #fff;
-        }
-        * { box-sizing: border-box; }
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
-      `}
-    </style>
+  const handleLogout = () => {
+    localStorage.clear();
+    setUser(null);
+    setCurrentTab('inicio');
+  };
+
+  const getConfig = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+
+  const criarLivro = async () => {
+    const title = prompt("Título do Livro:");
+    const author = prompt("Autor do Livro:");
+    if (!title || !author) return;
+    try {
+      await api.post('/books', { title, author, total_chapters: 20 }, getConfig());
+      alert("Livro cadastrado!");
+      carregarDados();
+    } catch (err) { alert(`Erro ao cadastrar: ${err.response?.data?.message || err.message}`); }
+  };
+
+  const editarLivro = async (id) => {
+    const newTitle = prompt("Novo título:");
+    if (!newTitle) return;
+    try {
+      await api.put(`/books/${id}`, { title: newTitle }, getConfig());
+      alert("Livro atualizado!");
+      carregarDados();
+    } catch (err) { alert(`Erro: ${err.response?.data?.message || err.message}`); }
+  };
+
+  const excluirLivro = async (id) => {
+    if (!window.confirm("Excluir este livro do catálogo definitivamente?")) return;
+    try {
+      await api.delete(`/books/${id}`, getConfig());
+      carregarDados();
+    } catch (err) { alert(`Erro: ${err.response?.data?.message || err.message}`); }
+  };
+
+  const adicionarAEstante = async (bookId) => {
+    try {
+      await api.post('/progress', { book_id: bookId, current_chapter: 1 }, getConfig());
+      alert('Livro adicionado à sua estante!');
+      carregarDados();
+    } catch (err) { alert(`Falha ao adicionar: ${err.response?.data?.message || err.message}`); }
+  };
+
+  const atualizarCapitulo = async (bookId, novoCapitulo) => {
+    if (novoCapitulo < 0) return;
+    try {
+      await api.put(`/progress/${bookId}`, { current_chapter: novoCapitulo }, getConfig());
+      carregarDados();
+    } catch (err) { alert(`Erro ao atualizar capítulo: ${err.response?.data?.message || err.message}`); }
+  };
+
+  const removerDaEstante = async (bookId) => {
+    if (!window.confirm("Remover da sua estante?")) return;
+    try {
+      await api.delete(`/progress/${bookId}`, getConfig());
+      carregarDados();
+    } catch (err) { alert(`Erro ao remover: ${err.response?.data?.message || err.message}`); }
+  };
+
+  const criarAvaliacao = async (bookId) => {
+    const rating = prompt("Nota de 1 a 5:");
+    const comment = prompt("Seu comentário:");
+    if (!rating) return;
+    try {
+      await api.post('/reviews', { 
+        book_id: bookId, 
+        rating: Number(rating), 
+        review_text: comment 
+      }, getConfig());
+      
+      alert("Avaliação salva!");
+    } catch (err) { 
+      alert(`Erro: ${err.response?.data?.error || err.message}`); 
+    }
+  };
+
+  const verAvaliacoes = async (bookId) => {
+    try {
+      const res = await api.get(`/reviews/book/${bookId}`, getConfig());
+      
+      const avaliacoesDoLivro = res.data;
+      
+      if (!avaliacoesDoLivro || avaliacoesDoLivro.length === 0) {
+        alert("Ainda não há avaliações para este livro.");
+        return;
+      }
+
+      const textoAvaliacoes = avaliacoesDoLivro.map(r => 
+        `Nota: ${r.rating} ⭐\nComentário: ${r.review_text}`
+      ).join('\n\n---\n\n');
+      
+      alert(`AVALIAÇÕES:\n\n${textoAvaliacoes}`);
+    } catch (err) { 
+      alert(`Erro ao buscar avaliações: ${err.response?.data?.error || err.message}`); 
+    }
+  };
+
+  const RenderStars = ({ rating }) => (
+    <div style={{ display: 'flex', gap: '2px', marginTop: '4px' }}>
+      {[...Array(5)].map((_, i) => (
+        <Star key={i} size={12} fill={i < rating ? "#fbbf24" : "transparent"} color={i < rating ? "#fbbf24" : "#475569"} />
+      ))}
+    </div>
   );
 
-  if (user) {
-    return (
-      <>
-        <GlobalStyle />
-        <div style={styles.appContainer}>
-          
-          <div style={styles.contentArea}>
+  const renderTabContent = () => {
+    switch (currentTab) {
+      case 'inicio':
+        return (
+          <div style={styles.page}>
+            <header style={styles.userHeader}>
+              <div><p style={styles.greeting}>Boa tarde 👋</p><h2 style={styles.userName}>{user.name}</h2></div>
+              <div style={styles.avatar}>{user.initials}</div>
+            </header>
             
-            {currentTab === 'inicio' && (
-              <div style={styles.page}>
-                <header style={styles.userHeader}>
-                  <div>
-                    <p style={styles.greeting}>Boa tarde 👋</p>
-                    <h2 style={styles.userName}>{user.name}</h2>
-                  </div>
-                  <div style={styles.avatar}>{user.name.charAt(0).toUpperCase()}</div>
-                </header>
-
-                <div style={styles.streakCard}>
-                  <h3 style={{margin: 0, fontSize: '18px'}}>🔥 7 dias de streak!</h3>
-                  <p style={{margin: '5px 0 0', fontSize: '14px', color: '#cbd5e1'}}>Leia hoje para manter sua ofensiva.</p>
-                </div>
-
-                <h3 style={styles.sectionTitle}>✨ RECOMENDADOS</h3>
-                <div style={styles.horizontalScroll}>
-                  {catalogo.slice(0, 3).map(livro => (
-                    <div key={livro.id} style={styles.bookCardMini}>
-                      <div style={styles.coverPlaceholder}>{livro.title.charAt(0)}</div>
-                      <p style={styles.bookTitleMini}>{livro.title}</p>
-                      <p style={styles.bookAuthorMini}>{livro.author}</p>
-                    </div>
-                  ))}
-                  {catalogo.length === 0 && <p style={{fontSize: '14px', color: '#64748b'}}>Nenhum livro cadastrado.</p>}
-                </div>
-
-                <h3 style={styles.sectionTitle}>CONTINUE LENDO</h3>
-                {minhaLista.length > 0 ? (
-                  minhaLista.map(item => (
-                    <div key={item.progress_id} style={styles.continueCard}>
-                      <div style={{flex: 1}}>
-                        <h4 style={{margin: '0 0 5px 0'}}>{item.title}</h4>
-                        <p style={{margin: 0, fontSize: '12px', color: '#94a3b8'}}>Capítulo {item.current_chapter}</p>
-                      </div>
-                      
-                      {/* BOTOES DE AÇÃO: LER e REMOVER */}
-                      <div style={{display: 'flex', gap: '8px'}}>
-                        <button 
-                          onClick={() => removerLivro(item.book_id)} 
-                          style={styles.deleteButton}
-                          title="Remover da estante"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                        <button style={styles.readButton}>Ler ▶</button>
-                      </div>
-
-                    </div>
-                  ))
-                ) : (
-                  <div style={styles.emptyState}>
-                    <p>Sua biblioteca está vazia.</p>
-                    <button onClick={() => setCurrentTab('catalogo')} style={styles.textButton}>Ir para o catálogo</button>
-                  </div>
-                )}
+            <div style={styles.streakCard}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                <Flame size={28} color="#f97316" fill="#f97316" />
+                <div><h3 style={{ margin: 0, fontSize: '18px' }}>7 dias de streak!</h3><p style={{ margin: '0', fontSize: '12px' }}>Leia hoje para manter.</p></div>
               </div>
-            )}
+            </div>
+            
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 style={{...styles.sectionTitle, marginBottom: 0}}><Sparkles size={14} color="#fbbf24" /> DESTAQUES</h3>
+              <button onClick={() => setCurrentTab('catalogo')} style={{ background: 'none', border: 'none', color: '#818cf8', fontSize: '13px', fontWeight: 'bold', cursor: 'pointer' }}>
+                Ver tudo
+              </button>
+            </div>
+            
+            <div style={styles.horizontalScroll} className="hide-scroll">
+              {catalogo.slice(0, 5).map(livro => (
+                <div key={livro.id} style={styles.bookCardMini} onClick={() => setCurrentTab('catalogo')}>
+                  <div style={styles.coverIcon}>📖</div>
+                  <h4 style={styles.bookTitleMini} className="truncate">{livro.title}</h4>
+                  <RenderStars rating={5} />
+                </div>
+              ))}
+              <div style={{...styles.bookCardMini, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', opacity: 0.7}} onClick={() => setCurrentTab('catalogo')}>
+                 <div style={{...styles.coverIcon, backgroundColor: 'rgba(255,255,255,0.05)', fontSize: '16px', border: '1px dashed #475569'}}>+ Catálogo</div>
+              </div>
+            </div>
 
-            {currentTab === 'catalogo' && (
-              <div style={styles.page}>
-                <h2 style={{marginTop: 0}}>Catálogo</h2>
-                <div style={styles.gridList}>
-                  {catalogo.map(livro => (
-                    <div key={livro.id} style={styles.catalogCard}>
-                      <div>
-                        <h3 style={{margin: '0 0 5px', fontSize: '16px'}}>{livro.title}</h3>
-                        <p style={{margin: 0, fontSize: '14px', color: '#94a3b8'}}>{livro.author}</p>
-                        <span style={styles.badge}>{livro.difficulty_level || 'Livre'}</span>
-                      </div>
-                      <button 
-                        onClick={() => adicionarLivro(livro.id)} 
-                        style={styles.addButton}
-                      >
-                        + Adicionar
-                      </button>
-                    </div>
-                  ))}
-                  {catalogo.length === 0 && (
-                     <div style={styles.emptyState}>
-                       <p>Nenhum livro cadastrado no banco ainda.</p>
-                     </div>
-                  )}
+            <h3 style={{...styles.sectionTitle, marginTop: '25px'}}>CONTINUE LENDO</h3>
+            {minhaLista.length === 0 ? <p style={{color: '#64748b', fontSize: '13px'}}>Adicione livros do catálogo para começar!</p> : null}
+            {minhaLista.slice(0, 3).map(item => (
+              <div key={item.id || item.book_id} style={styles.continueCard}>
+                <div style={styles.continueCover}>📜</div>
+                <div style={{ flex: 1, marginLeft: '15px' }}>
+                  <h4 style={{ margin: '0 0 4px 0', fontSize: '15px' }}>{item.title || 'Livro ID: ' + item.book_id}</h4>
+                  <p style={{ margin: '0 0 5px 0', fontSize: '12px', color: '#94a3b8' }}>Capítulo {item.current_chapter || 0}</p>
+                </div>
+                <button onClick={() => setCurrentTab('leitor')} style={styles.readButton}>
+                  Abrir <Play size={12} fill="#a5b4fc" style={{marginLeft: '2px'}}/>
+                </button>
+              </div>
+            ))}
+          </div>
+        );
+
+      case 'catalogo':
+        return (
+          <div style={styles.page}>
+            <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px'}}>
+              <h2 style={{margin: 0}}>Catálogo</h2>
+              <button onClick={criarLivro} style={styles.actionBtn}><Plus size={16}/> Novo</button>
+            </div>
+            {catalogo.length === 0 ? <p style={{color: '#64748b'}}>Nenhum livro no banco de dados.</p> : null}
+            {catalogo.map(livro => (
+              <div key={livro.id} style={styles.listCard}>
+                <div style={{flex: 1}}>
+                  <h4 style={{margin: '0 0 5px'}}>{livro.title}</h4>
+                  <p style={{margin: 0, fontSize: '12px', color: '#94a3b8'}}>{livro.author}</p>
+                </div>
+                <div style={{display: 'flex', gap: '8px'}}>
+                  <button onClick={() => adicionarAEstante(livro.id)} style={styles.iconBtn} title="Add Estante"><Check size={18} color="#10b981"/></button>
+                  <button onClick={() => editarLivro(livro.id)} style={styles.iconBtn} title="Editar"><Edit2 size={18} color="#3b82f6"/></button>
+                  <button onClick={() => excluirLivro(livro.id)} style={styles.iconBtn} title="Excluir"><Trash2 size={18} color="#ef4444"/></button>
                 </div>
               </div>
-            )}
+            ))}
+          </div>
+        );
 
-            {currentTab === 'perfil' && (
-              <div style={styles.page}>
-                <h2 style={{marginTop: 0}}>Perfil</h2>
-                <div style={styles.profileInfo}>
-                  <div style={{...styles.avatar, width: '80px', height: '80px', fontSize: '32px', margin: '0 auto 15px'}}>
-                    {user.name.charAt(0).toUpperCase()}
+      case 'leitor':
+        return (
+          <div style={styles.page}>
+            <h2 style={{marginBottom: '20px'}}>Minha Estante</h2>
+            {minhaLista.length === 0 ? <p style={{color: '#64748b'}}>Sua estante está vazia. Adicione livros do catálogo!</p> : null}
+            {minhaLista.map(item => (
+              <div key={item.id || item.book_id} style={{...styles.continueCard, flexDirection: 'column', alignItems: 'flex-start'}}>
+                <div style={{display: 'flex', width: '100%', alignItems: 'center'}}>
+                  <div style={styles.continueCover}>📜</div>
+                  <div style={{ flex: 1, marginLeft: '15px' }}>
+                    <h4 style={{ margin: '0 0 4px 0', fontSize: '15px' }}>{item.title || 'Livro ID: ' + item.book_id}</h4>
+                    <p style={{ margin: '0 0 10px 0', fontSize: '11px', color: '#64748b' }}>
+                      Capítulo atual: {item.current_chapter || 0}
+                    </p>
+                    <div style={{display: 'flex', gap: '10px'}}>
+                      <button onClick={() => atualizarCapitulo(item.book_id, (item.current_chapter || 1) - 1)} style={styles.smallBtn}>- Cap</button>
+                      <button onClick={() => atualizarCapitulo(item.book_id, (item.current_chapter || 1) + 1)} style={styles.smallBtn}>+ Cap</button>
+                    </div>
                   </div>
-                  <h3 style={{textAlign: 'center', margin: '0 0 5px'}}>{user.name}</h3>
-                  <p style={{textAlign: 'center', color: '#94a3b8', margin: '0 0 30px'}}>Leitor Nível 3</p>
-                  
-                  <button onClick={handleLogout} style={{...styles.button, backgroundColor: 'rgba(239, 68, 68, 0.1)', border: '1px solid #ef4444', color: '#ef4444'}}>
-                    <LogOut size={18} /> Sair da conta
+                </div>
+                
+                <div style={{display: 'flex', gap: '10px', marginTop: '15px', width: '100%', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '15px'}}>
+                  <button onClick={() => criarAvaliacao(item.book_id)} style={{...styles.smallBtn, background: '#ca8a04', flex: 1}}>
+                    <Star size={12} style={{marginRight: '4px'}}/> Avaliar
+                  </button>
+                  <button onClick={() => verAvaliacoes(item.book_id)} style={{...styles.smallBtn, background: '#4f46e5', flex: 1}}>
+                    <MessageSquare size={12} style={{marginRight: '4px'}}/> Reviews
+                  </button>
+                  <button onClick={() => removerDaEstante(item.book_id)} style={{...styles.smallBtn, background: '#991b1b', flex: 1}}>
+                    <Trash2 size={12} style={{marginRight: '4px'}}/> Remover
                   </button>
                 </div>
               </div>
-            )}
+            ))}
           </div>
+        );
 
-          <nav style={styles.bottomNav}>
-            <div style={currentTab === 'inicio' ? styles.navItemActive : styles.navItem} onClick={() => setCurrentTab('inicio')}>
-              <Home size={24} />
-              <span>Início</span>
+      case 'perfil':
+        return (
+          <div style={styles.page}>
+            <header style={{textAlign: 'center', marginBottom: '30px', marginTop: '20px'}}>
+              <div style={{...styles.avatar, width: '80px', height: '80px', fontSize: '24px', margin: '0 auto 15px'}}>{user.initials}</div>
+              <h2 style={{margin: '0'}}>{user.name}</h2>
+              <p style={{color: '#94a3b8', margin: '5px 0 0'}}>Membro do Elegere</p>
+            </header>
+            <div style={{display: 'flex', gap: '10px', justifyContent: 'center', marginBottom: '40px'}}>
+              <div style={{backgroundColor: '#1e293b', padding: '15px', borderRadius: '15px', textAlign: 'center', flex: 1}}>
+                <h3 style={{margin: 0, color: '#818cf8'}}>{minhaLista.length}</h3>
+                <p style={{margin: 0, fontSize: '12px', color: '#94a3b8'}}>Livros na Estante</p>
+              </div>
             </div>
-            <div style={currentTab === 'catalogo' ? styles.navItemActive : styles.navItem} onClick={() => setCurrentTab('catalogo')}>
-              <LayoutGrid size={24} />
-              <span>Catálogo</span>
-            </div>
-            <div style={currentTab === 'perfil' ? styles.navItemActive : styles.navItem} onClick={() => setCurrentTab('perfil')}>
-              <User size={24} />
-              <span>Perfil</span>
-            </div>
-          </nav>
+            <button onClick={handleLogout} style={{...styles.button, width: '100%', backgroundColor: 'rgba(239, 68, 68, 0.2)', border: '1px solid #ef4444', color: '#ef4444'}}>
+              <LogOut size={18} /> Sair da conta
+            </button>
+          </div>
+        );
+      default: return null;
+    }
+  };
 
+  if (!user) {
+    return (
+      <>
+        <GlobalStyle />
+        <div style={styles.authContainer}>
+          <div style={styles.bookmark}><BookMarked size={24} color="#fff" /></div>
+          <main style={styles.authCard}>
+            <header style={{ textAlign: 'center', marginBottom: '30px' }}>
+              <div style={styles.logoCircle}><BookOpen size={32} color="#818cf8" /></div>
+              <h1 style={styles.authTitle}>Elegere</h1>
+              <p style={{ color: '#94a3b8', fontSize: '14px', marginTop: '8px' }}>
+                {isLogin ? 'A sua jornada literária continua aqui.' : 'Abra a primeira página da sua história.'}
+              </p>
+            </header>
+            <form onSubmit={handleAuth} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+              {!isLogin && (
+                <div style={styles.inputWrapper}>
+                  <User style={styles.icon} size={20} />
+                  <input type="text" placeholder="Nome" style={styles.input} value={name} onChange={(e) => setName(e.target.value)} required />
+                </div>
+              )}
+              <div style={styles.inputWrapper}>
+                <Mail style={styles.icon} size={20} />
+                <input type="email" placeholder="E-mail" style={styles.input} value={email} onChange={(e) => setEmail(e.target.value)} required />
+              </div>
+              <div style={styles.inputWrapper}>
+                <Lock style={styles.icon} size={20} />
+                <input type={showPassword ? "text" : "password"} placeholder="Senha" style={{...styles.input, paddingRight: '45px'}} value={password} onChange={(e) => setPassword(e.target.value)} required />
+                <div style={styles.eyeIcon} onClick={() => setShowPassword(!showPassword)}>{showPassword ? <EyeOff size={20} /> : <Eye size={20} />}</div>
+              </div>
+              {message.text && (
+                <div style={{ fontSize: '14px', textAlign: 'center', padding: '12px', borderRadius: '10px', color: message.type === 'error' ? '#f87171' : '#34d399', backgroundColor: message.type === 'error' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)' }}>
+                  {message.text}
+                </div>
+              )}
+              <button type="submit" style={styles.button} disabled={loading}>
+                {loading ? 'A processar...' : (isLogin ? 'Aceder à Biblioteca' : 'Criar Conta')} <ChevronRight size={20} />
+              </button>
+            </form>
+            <footer style={{ marginTop: '25px', textAlign: 'center', fontSize: '14px', color: '#94a3b8' }}>
+              <p>{isLogin ? 'Não tem conta? ' : 'Já é um leitor? '} <span style={{ color: '#818cf8', fontWeight: '600', cursor: 'pointer' }} onClick={() => {setIsLogin(!isLogin); setMessage({text:'', type:''});}}> {isLogin ? 'Registre-se' : 'Faça Login'} </span></p>
+            </footer>
+          </main>
         </div>
       </>
     );
@@ -306,150 +382,63 @@ function App() {
   return (
     <>
       <GlobalStyle />
-      <div style={styles.container}>
-        <div style={styles.bookmark}>
-          <BookMarked size={24} color="#fff" />
+      <div style={styles.appContainer}>
+        <div style={styles.contentArea}>
+          {renderTabContent()}
         </div>
-
-        <main style={styles.card}>
-          <header style={styles.header}>
-            <div style={styles.logoCircle}>
-              <BookOpen size={32} color="#818cf8" />
-            </div>
-            <h1 style={styles.title}>Elegere</h1>
-            <p style={styles.subtitle}>
-              {isLogin ? 'A sua jornada literária continua aqui.' : 'Abra a primeira página da sua história.'}
-            </p>
-          </header>
-
-          <form onSubmit={handleAuth} style={styles.form}>
-            {!isLogin && (
-              <div style={styles.inputWrapper}>
-                <User style={styles.icon} size={20} />
-                <input 
-                  type="text" 
-                  placeholder="Nome de utilizador" 
-                  style={styles.input}
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                />
-              </div>
-            )}
-
-            <div style={styles.inputWrapper}>
-              <Mail style={styles.icon} size={20} />
-              <input 
-                type="email" 
-                placeholder="E-mail" 
-                style={styles.input}
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-              />
-            </div>
-
-            <div style={styles.inputWrapper}>
-              <Lock style={styles.icon} size={20} />
-              <input 
-                type={showPassword ? "text" : "password"} 
-                placeholder="Senha" 
-                style={{...styles.input, paddingRight: '45px'}}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-              <div style={styles.eyeIcon} onClick={() => setShowPassword(!showPassword)}>
-                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-              </div>
-            </div>
-
-            {isLogin && (
-              <span style={{...styles.link, fontSize: '12px', alignSelf: 'flex-end', marginTop: '-10px', marginBottom: '5px'}} 
-                    onClick={() => alert('Em breve!')}>
-                Esqueceu-se da senha?
-              </span>
-            )}
-
-            {message.text && (
-              <div style={{
-                ...styles.message, 
-                color: message.type === 'error' ? '#f87171' : '#34d399',
-                backgroundColor: message.type === 'error' ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)'
-              }}>
-                {message.text}
-              </div>
-            )}
-
-            <button type="submit" style={styles.button} disabled={loading}>
-              {loading ? 'A processar...' : (isLogin ? 'Aceder à Biblioteca' : 'Criar Conta')}
-              <ChevronRight size={20} />
-            </button>
-          </form>
-
-          <footer style={styles.footer}>
-            <p>
-              {isLogin ? 'Não tem conta? ' : 'Já é um leitor? '}
-              <span style={styles.link} onClick={() => {setIsLogin(!isLogin); setMessage({text:'', type:''}); setShowPassword(false)}}>
-                {isLogin ? 'Registre-se' : 'Faça Login'}
-              </span>
-            </p>
-          </footer>
-        </main>
+        <nav style={styles.bottomNav}>
+          <div style={currentTab === 'inicio' ? styles.navItemActive : styles.navItem} onClick={() => setCurrentTab('inicio')}>
+            <Home size={22} /><span>Início</span>
+          </div>
+          <div style={currentTab === 'catalogo' ? styles.navItemActive : styles.navItem} onClick={() => setCurrentTab('catalogo')}>
+            <Library size={22} /><span>Catálogo</span>
+          </div>
+          <div style={currentTab === 'leitor' ? styles.navItemActive : styles.navItem} onClick={() => setCurrentTab('leitor')}>
+            <BookOpen size={22} /><span>Estante</span>
+          </div>
+          <div style={currentTab === 'perfil' ? styles.navItemActive : styles.navItem} onClick={() => setCurrentTab('perfil')}>
+            <User size={22} /><span>Perfil</span>
+          </div>
+        </nav>
       </div>
     </>
   );
 }
 
 const styles = {
-  container: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', width: '100%', background: '#0f172a', padding: '20px' },
-  bookmark: { width: '50px', height: '70px', backgroundColor: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '0 0 8px 8px', marginBottom: '-20px', zIndex: 10, boxShadow: '0 4px 20px rgba(99, 102, 241, 0.5)' },
-  card: { backgroundColor: 'rgba(255, 255, 255, 0.03)', padding: '40px 30px', borderRadius: '28px', border: '1px solid rgba(255, 255, 255, 0.1)', width: '100%', maxWidth: '400px' },
-  header: { textAlign: 'center', marginBottom: '30px' },
-  logoCircle: { width: '64px', height: '64px', backgroundColor: 'rgba(99, 102, 241, 0.1)', borderRadius: '20px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: '15px', border: '1px solid rgba(99, 102, 241, 0.2)' },
-  title: { fontSize: '28px', margin: '0', fontWeight: '800', color: '#fff' },
-  subtitle: { color: '#94a3b8', fontSize: '14px', marginTop: '8px' },
-  form: { display: 'flex', flexDirection: 'column', gap: '15px' },
+  appContainer: { display: 'flex', flexDirection: 'column', height: '100vh', width: '100%', maxWidth: '450px', margin: '0 auto', backgroundColor: '#0b1120', position: 'relative' },
+  contentArea: { flex: 1, overflowY: 'auto', padding: '24px', paddingBottom: '90px' },
+  page: { animation: 'fadeIn 0.3s ease-in-out' },
+  userHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' },
+  greeting: { margin: 0, color: '#94a3b8', fontSize: '13px' },
+  userName: { margin: '2px 0 0', fontSize: '22px', fontWeight: '800' },
+  avatar: { width: '48px', height: '48px', borderRadius: '50%', backgroundColor: '#8b5cf6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px', fontWeight: 'bold' },
+  streakCard: { background: 'linear-gradient(135deg, #2e1065, #4c1d95)', padding: '20px', borderRadius: '20px', marginBottom: '20px' },
+  sectionTitle: { fontSize: '12px', color: '#94a3b8', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '6px' },
+  horizontalScroll: { display: 'flex', gap: '15px', overflowX: 'auto', paddingBottom: '15px', scrollBehavior: 'smooth' },
+  bookCardMini: { minWidth: '130px', flexShrink: 0, cursor: 'pointer' },
+  coverIcon: { width: '130px', height: '130px', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#4c1d95', fontSize: '30px', marginBottom: '10px' },
+  bookTitleMini: { margin: 0, fontSize: '14px' },
+  listCard: { backgroundColor: '#111827', padding: '15px', borderRadius: '15px', marginBottom: '10px', display: 'flex', alignItems: 'center', border: '1px solid rgba(255,255,255,0.05)' },
+  continueCard: { display: 'flex', alignItems: 'center', background: '#111827', padding: '16px', borderRadius: '20px', marginBottom: '15px', border: '1px solid rgba(255,255,255,0.05)' },
+  continueCover: { width: '60px', height: '80px', borderRadius: '12px', background: '#b45309', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px' },
+  actionBtn: { background: '#4f46e5', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: '8px', display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' },
+  iconBtn: { background: 'rgba(255,255,255,0.1)', border: 'none', padding: '8px', borderRadius: '8px', cursor: 'pointer', display: 'flex' },
+  smallBtn: { background: '#334155', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: '6px', fontSize: '12px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' },
+  button: { padding: '14px', background: 'linear-gradient(to right, #6366f1, #a855f7)', color: '#fff', border: 'none', borderRadius: '12px', fontSize: '16px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' },
+  readButton: { background: 'rgba(99, 102, 241, 0.2)', color: '#a5b4fc', border: 'none', padding: '6px 12px', borderRadius: '20px', cursor: 'pointer', fontWeight: 'bold', display: 'flex', alignItems: 'center' },
+  bottomNav: { position: 'absolute', bottom: 0, left: 0, right: 0, height: '75px', backgroundColor: '#0f172a', display: 'flex', justifyContent: 'space-around', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.05)' },
+  navItem: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', color: '#64748b', cursor: 'pointer', fontSize: '11px' },
+  navItemActive: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px', color: '#818cf8', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' },
+  authContainer: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)', padding: '20px' },
+  bookmark: { width: '50px', height: '70px', backgroundColor: '#6366f1', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '0 0 8px 8px', marginBottom: '-20px', zIndex: 10 },
+  authCard: { backgroundColor: 'rgba(255, 255, 255, 0.03)', backdropFilter: 'blur(12px)', padding: '40px 30px', borderRadius: '28px', border: '1px solid rgba(255, 255, 255, 0.1)', width: '100%', maxWidth: '400px' },
+  logoCircle: { width: '64px', height: '64px', backgroundColor: 'rgba(99, 102, 241, 0.1)', borderRadius: '20px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', marginBottom: '15px' },
+  authTitle: { fontSize: '28px', margin: '0', fontWeight: '800', background: 'linear-gradient(to right, #818cf8, #c084fc)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' },
   inputWrapper: { position: 'relative', display: 'flex', alignItems: 'center' },
   icon: { position: 'absolute', left: '15px', color: '#64748b' },
   eyeIcon: { position: 'absolute', right: '15px', color: '#64748b', cursor: 'pointer' },
-  input: { width: '100%', padding: '14px 15px 14px 45px', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.1)', fontSize: '16px', backgroundColor: 'rgba(255, 255, 255, 0.05)', color: '#fff', outline: 'none' },
-  button: { width: '100%', padding: '14px', background: 'linear-gradient(to right, #6366f1, #a855f7)', color: '#fff', border: 'none', borderRadius: '12px', fontSize: '16px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' },
-  message: { fontSize: '14px', textAlign: 'center', padding: '12px', borderRadius: '10px' },
-  footer: { marginTop: '25px', textAlign: 'center', fontSize: '14px', color: '#94a3b8' },
-  link: { color: '#818cf8', fontWeight: '600', cursor: 'pointer' },
-  
-  appContainer: { display: 'flex', flexDirection: 'column', height: '100vh', width: '100%', maxWidth: '500px', margin: '0 auto', background: '#0f172a', position: 'relative' },
-  contentArea: { flex: 1, overflowY: 'auto', padding: '20px', paddingBottom: '90px' },
-  page: { animation: 'fadeIn 0.3s ease-in-out' },
-  userHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '25px' },
-  greeting: { margin: 0, color: '#94a3b8', fontSize: '14px' },
-  userName: { margin: 0, fontSize: '24px', fontWeight: 'bold' },
-  avatar: { width: '45px', height: '45px', borderRadius: '50%', backgroundColor: '#a855f7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 'bold' },
-  streakCard: { background: 'linear-gradient(to right, #312e81, #4c1d95)', padding: '20px', borderRadius: '16px', border: '1px solid rgba(139, 92, 246, 0.3)', marginBottom: '30px' },
-  sectionTitle: { fontSize: '12px', letterSpacing: '1px', color: '#64748b', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '15px' },
-  horizontalScroll: { display: 'flex', gap: '15px', overflowX: 'auto', paddingBottom: '10px', marginBottom: '30px' },
-  bookCardMini: { minWidth: '120px' },
-  coverPlaceholder: { width: '120px', height: '160px', borderRadius: '12px', background: 'linear-gradient(to bottom, #1e293b, #0f172a)', border: '1px solid #334155', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '40px', color: '#475569', marginBottom: '10px' },
-  bookTitleMini: { margin: 0, fontSize: '14px', fontWeight: 'bold', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
-  bookAuthorMini: { margin: '2px 0 0', fontSize: '12px', color: '#94a3b8' },
-  continueCard: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255, 255, 255, 0.05)', padding: '15px', borderRadius: '16px', marginBottom: '10px', border: '1px solid rgba(255,255,255,0.05)' },
-  readButton: { background: '#4f46e5', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' },
-  
-  /* ESTILO NOVO: BOTÃO DELETAR */
-  deleteButton: { background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.3)', padding: '8px', borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-
-  emptyState: { textAlign: 'center', padding: '30px', color: '#64748b', background: 'rgba(0,0,0,0.2)', borderRadius: '12px' },
-  textButton: { background: 'none', border: 'none', color: '#818cf8', cursor: 'pointer', marginTop: '10px' },
-  gridList: { display: 'flex', flexDirection: 'column', gap: '15px' },
-  catalogCard: { background: 'rgba(255,255,255,0.03)', padding: '15px', borderRadius: '16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid rgba(255,255,255,0.05)' },
-  badge: { display: 'inline-block', padding: '4px 8px', background: 'rgba(16, 185, 129, 0.2)', color: '#34d399', borderRadius: '4px', fontSize: '10px', fontWeight: 'bold', marginTop: '8px' },
-  addButton: { background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8', border: '1px solid rgba(99, 102, 241, 0.3)', padding: '8px 12px', borderRadius: '8px', cursor: 'pointer' },
-  profileInfo: { padding: '20px', background: 'rgba(255,255,255,0.02)', borderRadius: '16px', border: '1px solid rgba(255,255,255,0.05)' },
-  
-  bottomNav: { position: 'absolute', bottom: 0, left: 0, right: 0, height: '70px', background: 'rgba(15, 23, 42, 0.95)', backdropFilter: 'blur(10px)', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-around', alignItems: 'center', paddingBottom: '10px' },
-  navItem: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: '#64748b', cursor: 'pointer', fontSize: '12px' },
-  navItemActive: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', color: '#818cf8', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }
+  input: { width: '100%', padding: '14px 15px 14px 45px', borderRadius: '12px', border: '1px solid rgba(255, 255, 255, 0.1)', fontSize: '16px', backgroundColor: 'rgba(255, 255, 255, 0.05)', color: '#fff', outline: 'none' }
 };
 
 export default App;

@@ -1,11 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const progressController = require('../controllers/progressController');
-const authMiddleware = require('../middlewares/authMiddleware'); 
+const verifyToken = require('../middlewares/authMiddleware'); 
 
-router.post('/', authMiddleware, progressController.startReading);
-router.get('/', authMiddleware, progressController.getMyLibrary);
-router.put('/:book_id', authMiddleware, progressController.updateProgress);
-router.delete('/:book_id', authMiddleware, progressController.removeBook);
+router.post('/', verifyToken, progressController.startReading);
+router.get('/', verifyToken, progressController.getMyLibrary);
+router.put('/:book_id', verifyToken, progressController.updateProgress);
+router.delete('/:book_id', verifyToken, progressController.removeBook);
 
 module.exports = router;
