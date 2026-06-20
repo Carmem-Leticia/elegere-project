@@ -4,6 +4,14 @@ const bookController = {
     async create(req, res) {
         try {
             const { title, author, difficulty_level, category_id, cover_url } = req.body;
+
+            // Antes não havia validação aqui: title/author ausentes faziam o
+            // INSERT estourar uma violação de NOT NULL no banco, retornando um
+            // 500 genérico em vez de uma mensagem clara para quem chamou a API.
+            if (!title || !author) {
+                return res.status(400).json({ error: "Título e autor são obrigatórios." });
+            }
+
             const result = await pool.query(
                 'INSERT INTO books (title, author, difficulty_level, category_id, cover_url) VALUES ($1, $2, $3, $4, $5) RETURNING *',
                 [title, author, difficulty_level, category_id, cover_url]
@@ -32,8 +40,7 @@ const bookController = {
         try {
             const { id } = req.params;
             const { title, author, difficulty_level, category_id, cover_url } = req.body;
-            
-        
+
             const result = await pool.query(
                 `UPDATE books 
                  SET title = COALESCE($1, title), 

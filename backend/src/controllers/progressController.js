@@ -5,12 +5,23 @@ const progressController = {
     async startReading(req, res) {
         try {
             const { book_id } = req.body;
-            
-            const user_id = req.user.id || req.user.userId; 
-            
+            const user_id = req.user?.id;
+
+            console.log(`[startReading] user_id=${user_id} book_id=${book_id}`);
+
             if (!user_id) {
-                console.error("ERRO: ID do usuário não encontrado no token. Payload:", req.user);
-                return res.status(400).json({ error: "Erro de autenticação: ID do usuário ausente." });
+                return res.status(401).json({ error: 'Usuário não autenticado corretamente.' });
+            }
+            if (!book_id) {
+                return res.status(400).json({ error: 'book_id é obrigatório.' });
+            }
+
+            const userCheck = await pool.query('SELECT id FROM users WHERE id = $1', [user_id]);
+            if (userCheck.rows.length === 0) {
+                return res.status(401).json({ 
+                    error: 'Sua sessão expirou. Faça login novamente.',
+                    code: 'SESSION_EXPIRED'
+                });
             }
 
             const result = await pool.query(
@@ -18,24 +29,36 @@ const progressController = {
                 [user_id, book_id]
             );
             res.status(201).json(result.rows[0]);
-        } catch (e) { 
-            console.error("=== ERRO REAL AO INSERIR NO BANCO (startReading) ===", e);
-            res.status(400).json({ error: "Livro já está na sua estante ou erro no banco." }); 
+        } catch(err) {
+            console.error('[startReading] erro:', err.message, 'code:', err.code);
+            if (err.code === '23505') {
+                return res.status(409).json({ error: 'Este livro já está na sua estante.' });
+            }
+            if (err.code === '23503') {
+                return res.status(401).json({ 
+                    error: 'Sua sessão expirou. Faça login novamente.',
+                    code: 'SESSION_EXPIRED'
+                });
+            }
+            res.status(500).json({ error: 'Erro ao adicionar livro à estante: ' + err.message });
         }
     },
 
     async getMyLibrary(req, res) {
         try {
-            const user_id = req.user.id || req.user.userId;
+            const user_id = req.user?.id;
             const result = await pool.query(`
-                SELECT b.id as book_id, b.title, b.author, ub.current_chapter, ub.status, ub.id as progress_id
+                SELECT b.id as book_id, b.title, b.author, b.cover_url, b.gutenberg_id,
+                       ub.current_chapter, ub.status, ub.id as progress_id
                 FROM user_books ub
                 JOIN books b ON ub.book_id = b.id
-                WHERE ub.user_id = $1`, [user_id]);
+                WHERE ub.user_id = $1
+                ORDER BY ub.id DESC
+            `, [user_id]);
             res.json(result.rows);
-        } catch (err) {
-            console.error("=== ERRO AO BUSCAR BIBLIOTECA ===", err);
-            res.status(500).json({ error: "Erro ao buscar biblioteca." });
+        } catch(err) {
+            console.error('[getMyLibrary] erro:', err.message);
+            res.status(500).json({ error: 'Erro ao buscar biblioteca.' });
         }
     },
 
@@ -43,27 +66,36 @@ const progressController = {
         try {
             const { book_id } = req.params;
             const { current_chapter, status } = req.body;
-            const user_id = req.user.id || req.user.userId;
+            const user_id = req.user?.id;
             const result = await pool.query(
-                'UPDATE user_books SET current_chapter = $1, status = $2 WHERE user_id = $3 AND book_id = $4 RETURNING *',
+                `UPDATE user_books 
+                 SET current_chapter = COALESCE($1, current_chapter),
+                     status = COALESCE($2, status)
+                 WHERE user_id = $3 AND book_id = $4 RETURNING *`,
                 [current_chapter, status, user_id, book_id]
             );
+            if (!result.rows.length) {
+                return res.status(404).json({ error: 'Livro não encontrado na estante.' });
+            }
             res.json(result.rows[0]);
-        } catch (err) {
-            console.error("=== ERRO AO ATUALIZAR PROGRESSO ===", err);
-            res.status(500).json({ error: "Erro ao atualizar progresso." });
+        } catch(err) {
+            console.error('[updateProgress] erro:', err.message);
+            res.status(500).json({ error: 'Erro ao atualizar progresso.' });
         }
     },
-  
+
     async removeBook(req, res) {
         try {
             const { book_id } = req.params;
-            const user_id = req.user.id || req.user.userId;
-            await pool.query('DELETE FROM user_books WHERE user_id = $1 AND book_id = $2', [user_id, book_id]);
-            res.json({ message: "Livro removido da sua estante!" });
-        } catch (err) {
-            console.error("=== ERRO AO REMOVER LIVRO ===", err);
-            res.status(500).json({ error: "Erro ao remover livro." });
+            const user_id = req.user?.id;
+            await pool.query(
+                'DELETE FROM user_books WHERE user_id = $1 AND book_id = $2',
+                [user_id, book_id]
+            );
+            res.json({ message: 'Livro removido da estante.' });
+        } catch(err) {
+            console.error('[removeBook] erro:', err.message);
+            res.status(500).json({ error: 'Erro ao remover livro.' });
         }
     }
 };
