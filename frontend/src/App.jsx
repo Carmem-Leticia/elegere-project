@@ -1,17 +1,14 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   BookOpen, Mail, Lock, ChevronRight, BookMarked,
   User, LogOut, Library, Star, Eye, EyeOff,
   Home, Play, Sparkles, Flame, Plus, Trash2, Edit2, Check, MessageSquare,
   Search, Globe, X, Volume2, ArrowLeft, BookOpenCheck, Loader2,
   Target, Trophy, TrendingUp, Calendar, ChevronDown, ChevronUp,
-  Download, ExternalLink, Filter
+  Download, ExternalLink, Filter, PenLine, Send, Bot, StickyNote
 } from 'lucide-react';
 import api from './services/api';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ESTILOS GLOBAIS
-// ─────────────────────────────────────────────────────────────────────────────
 const GlobalStyle = () => (
   <style>{`
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Lora:ital,wght@0,400;0,600;1,400&display=swap');
@@ -36,15 +33,499 @@ const GlobalStyle = () => (
     }
     .reader-text{font-family:'Lora',Georgia,serif;font-size:17px;line-height:1.95;color:#dde6f3;white-space:pre-wrap;word-break:break-word}
     input::placeholder{color:#475569}
+    textarea::placeholder{color:#475569}
     button:active{transform:scale(.97)}
     .cat-tab{transition:background .15s,color .15s,border-color .15s}
     .progress-bar-fill{transition:width .6s cubic-bezier(.4,0,.2,1)}
+    .tag-pill{transition:background .15s,transform .1s}
+    .tag-pill:hover{transform:scale(1.04)}
   `}</style>
 );
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DICIONÁRIO POPUP
-// ─────────────────────────────────────────────────────────────────────────────
+const TAG_META = {
+  'fantasia':        { label:'Fantasia',         emoji:'🧙', desc:'Mundos mágicos e criaturas' },
+  'romance':         { label:'Romance',           emoji:'💕', desc:'Amor, paixão e relacionamentos' },
+  'aventura':        { label:'Aventura',          emoji:'⚔️', desc:'Jornadas e ação épica' },
+  'terror':          { label:'Terror',            emoji:'👻', desc:'Horror e suspense' },
+  'misterio':        { label:'Mistério',          emoji:'🔍', desc:'Crimes e charadas' },
+  'ficcao-cientifica':{ label:'Ficção Científica',emoji:'🚀', desc:'Tecnologia e futuros possíveis' },
+  'classicos':       { label:'Clássicos',         emoji:'🏛️', desc:'Obras universais da literatura' },
+  'poesia':          { label:'Poesia',            emoji:'✒️', desc:'Versos e lirismo' },
+  'filosofia':       { label:'Filosofia',         emoji:'🧠', desc:'Ética, razão e reflexão' },
+  'animais':         { label:'Animais',           emoji:'🐾', desc:'Histórias com bichos' },
+  'drama':           { label:'Drama',             emoji:'🎭', desc:'Conflitos humanos profundos' },
+  'humor':           { label:'Humor',             emoji:'😄', desc:'Comédia e leveza' },
+};
+
+function OnboardingScreen({ onFinish, onSkip }) {
+  const [selected, setSelected] = useState(new Set());
+  const [saving, setSaving] = useState(false);
+
+  const toggle = (tag) => {
+    setSelected(prev => {
+      const next = new Set(prev);
+      next.has(tag) ? next.delete(tag) : next.add(tag);
+      return next;
+    });
+  };
+
+  const save = async () => {
+    if (selected.size === 0) { alert('Selecione ao menos um gosto.'); return; }
+    setSaving(true);
+    try {
+      await api.post('/ai/preferences',
+        { tags: [...selected] },
+        { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
+      );
+      onFinish();
+    } catch(e) {
+      alert(e.response?.data?.error || 'Erro ao salvar preferências.');
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', minHeight:'100vh', background:'linear-gradient(160deg,#0b1120,#1e1b4b)', padding:'28px 20px', position:'relative' }}>
+      {onSkip && (
+        <button onClick={onSkip} style={{ ...S.iconBtn, position:'absolute', top:20, left:20 }}>
+          <ArrowLeft size={18} color="#94a3b8"/>
+        </button>
+      )}
+      <div style={{ maxWidth:420, width:'100%' }}>
+        <div style={{ textAlign:'center', marginBottom:32 }}>
+          <div style={{ fontSize:48, marginBottom:12 }}>📚</div>
+          <h1 style={{ margin:0, fontSize:24, fontWeight:800, background:'linear-gradient(to right,#818cf8,#c084fc)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent' }}>
+            O que você gosta de ler?
+          </h1>
+          <p style={{ color:'#64748b', fontSize:13, marginTop:8, lineHeight:1.6 }}>
+            Selecione seus interesses e vamos recomendar livros perfeitos para você.
+          </p>
+        </div>
+
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:28 }}>
+          {Object.entries(TAG_META).map(([tag, meta]) => {
+            const active = selected.has(tag);
+            return (
+              <button key={tag} onClick={() => toggle(tag)} className="tag-pill"
+                style={{
+                  display:'flex', alignItems:'center', gap:10, padding:'13px 14px',
+                  borderRadius:14, border: active ? '1.5px solid #6366f1' : '1px solid rgba(255,255,255,.08)',
+                  background: active ? 'rgba(99,102,241,.22)' : '#111827',
+                  cursor:'pointer', textAlign:'left', position:'relative',
+                }}>
+                <span style={{ fontSize:24, flexShrink:0 }}>{meta.emoji}</span>
+                <div style={{ overflow:'hidden' }}>
+                  <p style={{ margin:0, fontSize:12, fontWeight:700, color: active?'#a5b4fc':'#e2e8f0' }}>{meta.label}</p>
+                  <p style={{ margin:0, fontSize:10, color:'#475569', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{meta.desc}</p>
+                </div>
+                {active && (
+                  <div style={{ position:'absolute', top:8, right:8, width:16, height:16, borderRadius:'50%', background:'#6366f1', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                    <Check size={9} color="#fff"/>
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        <button onClick={save} disabled={saving || selected.size === 0}
+          style={{ ...S.button, width:'100%', opacity: selected.size===0 ? .5 : 1 }}>
+          {saving ? <Loader2 size={16} className="spinner"/> : <Sparkles size={16}/>}
+          {saving ? 'Salvando…' : `Continuar com ${selected.size} interesse${selected.size!==1?'s':''}`}
+        </button>
+
+        <p style={{ textAlign:'center', fontSize:11, color:'#334155', marginTop:14 }}>
+          Você pode alterar suas preferências depois no perfil.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function AITab({ catalogo }) {
+  const [tab, setTab]               = useState('rec');
+  const [recommendations, setRec]   = useState([]);
+  const [loadingRec, setLoadingRec] = useState(false);
+  const [loadedRec, setLoadedRec]   = useState(false);
+
+  const [selectedBookId, setSelectedBookId] = useState('');
+  const [question, setQuestion]     = useState('');
+  const [answer, setAnswer]         = useState(null);
+  const [asking, setAsking]         = useState(false);
+
+  const cfg = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+
+  const loadRec = useCallback(async () => {
+    setLoadingRec(true);
+    try {
+      const res = await api.get('/ai/recommendations?limit=12', cfg());
+      setRec(res.data.recommendations || []);
+    } catch { setRec([]); }
+    finally { setLoadingRec(false); setLoadedRec(true); }
+  }, []);
+
+  useEffect(() => { if (tab === 'rec' && !loadedRec) loadRec(); }, [tab, loadedRec, loadRec]);
+
+  const askQuestion = async () => {
+    if (!selectedBookId) { alert('Selecione um livro.'); return; }
+    if (!question.trim()) { alert('Digite uma pergunta.'); return; }
+    setAsking(true); setAnswer(null);
+    try {
+      const res = await api.post('/ai/ask', { book_id: Number(selectedBookId), question }, cfg());
+      setAnswer(res.data);
+    } catch(e) {
+      setAnswer({ matches: [], message: e.response?.data?.error || 'Erro ao processar pergunta.' });
+    } finally { setAsking(false); }
+  };
+
+  const DIFF_COLOR = { A1:'#10b981',A2:'#34d399',B1:'#fbbf24',B2:'#f97316',C1:'#ef4444','PT-BR':'#818cf8' };
+
+  return (
+    <div className="page-anim">
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:18 }}>
+        <div>
+          <h2 style={{ margin:0, fontSize:20, fontWeight:800 }}>Inteligência Literária</h2>
+          <p style={{ margin:'2px 0 0', fontSize:12, color:'#64748b' }}>Recomendações e assistente local</p>
+        </div>
+        <div style={{ display:'flex', alignItems:'center', gap:5, background:'rgba(99,102,241,.1)', border:'1px solid rgba(99,102,241,.2)', borderRadius:20, padding:'3px 10px' }}>
+          <Bot size={12} color="#818cf8"/>
+          <span style={{ fontSize:10, color:'#818cf8', fontWeight:700 }}>IA Local</span>
+        </div>
+      </div>
+
+      <div style={{ display:'flex', gap:8, marginBottom:20 }}>
+        {[['rec','✨ Recomendações'],['ask','💬 Assistente']].map(([k,label]) => (
+          <button key={k} onClick={() => setTab(k)}
+            style={{ fontSize:12, padding:'7px 16px', borderRadius:20, border:'none', cursor:'pointer', fontWeight:700,
+              background: tab===k ? '#4f46e5' : 'rgba(255,255,255,.07)',
+              color: tab===k ? '#fff' : '#64748b' }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'rec' && (
+        <div>
+          <div style={{ background:'rgba(99,102,241,.07)', border:'1px solid rgba(99,102,241,.15)', borderRadius:14, padding:'12px 14px', marginBottom:18, display:'flex', gap:10, alignItems:'flex-start' }}>
+            <Sparkles size={16} color="#818cf8" style={{ flexShrink:0, marginTop:2 }}/>
+            <p style={{ margin:0, fontSize:12, color:'#94a3b8', lineHeight:1.6 }}>
+              Recomendações calculadas localmente por similaridade de cosseno entre seus interesses e as tags do catálogo. Nenhum dado sai do servidor.
+            </p>
+          </div>
+
+          {loadingRec && (
+            <div style={{ textAlign:'center', padding:'40px 0', color:'#64748b' }}>
+              <Loader2 size={28} className="spinner" style={{ display:'inline' }}/>
+              <p style={{ marginTop:12, fontSize:13 }}>Calculando recomendações…</p>
+            </div>
+          )}
+
+          {!loadingRec && loadedRec && recommendations.length === 0 && (
+            <div style={{ textAlign:'center', padding:'40px 20px', color:'#475569' }}>
+              <Sparkles size={36} color="#1e293b" style={{ marginBottom:14 }}/>
+              <p style={{ fontSize:14, marginBottom:4 }}>Nenhuma recomendação ainda.</p>
+              <p style={{ fontSize:12 }}>Atualize suas preferências no Perfil para personalizar.</p>
+            </div>
+          )}
+
+          {recommendations.map((book) => {
+            const dc = DIFF_COLOR[book.difficulty_level] || '#818cf8';
+            return (
+              <div key={book.id} style={{ ...S.listCard, marginBottom:10, position:'relative', overflow:'hidden' }}>
+                <div style={{ position:'absolute', left:0, top:0, bottom:0, width:3, background:`linear-gradient(to bottom,#6366f1,#a855f7)`, borderRadius:'4px 0 0 4px' }}/>
+                <div style={{ width:50, height:68, borderRadius:8, flexShrink:0, background:'#1e293b', overflow:'hidden', display:'flex', alignItems:'center', justifyContent:'center', marginLeft:10, marginRight:12, border:'1px solid rgba(255,255,255,.06)' }}>
+                  {book.cover_url && book.cover_url.includes('gutenberg.org/cache')
+                    ? <img src={book.cover_url} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} onError={e=>{e.target.style.display='none'}}/>
+                    : <BookOpen size={20} color="#334155"/>}
+                </div>
+                <div style={{ flex:1, overflow:'hidden' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:2 }}>
+                    <p style={{ margin:0, fontSize:13, fontWeight:700 }} className="truncate">{book.title}</p>
+                    <span style={{ fontSize:10, background:'rgba(99,102,241,.2)', color:'#a5b4fc', padding:'2px 7px', borderRadius:10, fontWeight:800, flexShrink:0, marginLeft:6 }}>
+                      {book.match_score}% match
+                    </span>
+                  </div>
+                  <p style={{ margin:'0 0 6px', fontSize:11, color:'#94a3b8' }} className="truncate">{book.author}</p>
+                  <div style={{ display:'flex', gap:5 }}>
+                    {book.difficulty_level && <span style={{ ...S.tag, background:`${dc}22`, color:dc }}>{book.difficulty_level}</span>}
+                    {book.category_name && <span style={{ ...S.tag }}>{book.category_name}</span>}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+
+          {!loadingRec && loadedRec && recommendations.length > 0 && (
+            <button onClick={loadRec} style={{ ...S.smallBtn, margin:'8px auto', display:'flex' }}>
+              <TrendingUp size={12} style={{ marginRight:4 }}/> Recalcular
+            </button>
+          )}
+        </div>
+      )}
+
+      {tab === 'ask' && (
+        <div>
+          <div style={{ background:'rgba(99,102,241,.07)', border:'1px solid rgba(99,102,241,.15)', borderRadius:14, padding:'12px 14px', marginBottom:18, display:'flex', gap:10, alignItems:'flex-start' }}>
+            <Bot size={16} color="#818cf8" style={{ flexShrink:0, marginTop:2 }}/>
+            <p style={{ margin:0, fontSize:12, color:'#94a3b8', lineHeight:1.6 }}>
+              O assistente busca trechos relevantes do texto do livro usando TF-IDF local. Funciona somente com obras do Project Gutenberg.
+            </p>
+          </div>
+
+          <label style={{ fontSize:11, color:'#64748b', fontWeight:700, display:'block', marginBottom:6 }}>LIVRO</label>
+          <select value={selectedBookId} onChange={e => setSelectedBookId(e.target.value)}
+            style={{ width:'100%', padding:'11px 14px', borderRadius:10, border:'1px solid rgba(255,255,255,.09)',
+              background:'#111827', color: selectedBookId?'#e2e8f0':'#475569', fontSize:13, marginBottom:14, outline:'none' }}>
+            <option value="">Selecione um livro…</option>
+            {catalogo.filter(b => b.gutenberg_id).map(b => (
+              <option key={b.id} value={b.id}>{b.title} — {b.author}</option>
+            ))}
+          </select>
+
+          <label style={{ fontSize:11, color:'#64748b', fontWeight:700, display:'block', marginBottom:6 }}>SUA PERGUNTA</label>
+          <div style={{ position:'relative', marginBottom:14 }}>
+            <textarea
+              placeholder="Ex: O que acontece com Elizabeth no final? Qual é o papel de Darcy?"
+              value={question} onChange={e => setQuestion(e.target.value)}
+              rows={3}
+              style={{ width:'100%', padding:'12px 14px', borderRadius:10, border:'1px solid rgba(255,255,255,.09)',
+                background:'#111827', color:'#e2e8f0', fontSize:13, resize:'vertical', outline:'none', fontFamily:'inherit' }}
+            />
+          </div>
+
+          <button onClick={askQuestion} disabled={asking || !selectedBookId || !question.trim()}
+            style={{ ...S.button, width:'100%', opacity:(!selectedBookId||!question.trim())?0.5:1 }}>
+            {asking ? <Loader2 size={16} className="spinner"/> : <Send size={15}/>}
+            {asking ? 'Analisando texto…' : 'Buscar no livro'}
+          </button>
+
+          {answer && (
+            <div style={{ marginTop:20, animation:'slideUp .2s ease' }}>
+              {answer.message && (!answer.matches || answer.matches.length === 0) && (
+                <div style={{ background:'rgba(239,68,68,.08)', border:'1px solid rgba(239,68,68,.2)', borderRadius:12, padding:'14px 16px' }}>
+                  <p style={{ margin:0, fontSize:13, color:'#f87171' }}>{answer.message}</p>
+                </div>
+              )}
+
+              {answer.answer && (
+                <div style={{ background:'rgba(16,185,129,.08)', border:'1px solid rgba(16,185,129,.2)', borderRadius:12, padding:'14px 16px', marginBottom: answer.matches?.length ? 14 : 0 }}>
+                  <p style={{ margin:0, fontSize:13, color:'#d1fae5', lineHeight:1.6 }}>{answer.answer}</p>
+                </div>
+              )}
+
+              {answer.matches && answer.matches.length > 0 && (
+                <div>
+                  <h4 style={{ ...S.sectionTitle, marginBottom:12 }}>TRECHOS MAIS RELEVANTES</h4>
+                  {answer.matches.map((m, i) => (
+                    <div key={i} style={{ background:'#111827', border:'1px solid rgba(99,102,241,.15)', borderRadius:14, padding:'14px 16px', marginBottom:10 }}>
+                      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
+                        <span style={{ fontSize:10, color:'#64748b', fontWeight:700 }}>TRECHO {i+1}</span>
+                        <span style={{ fontSize:10, background:'rgba(99,102,241,.18)', color:'#818cf8', padding:'2px 8px', borderRadius:10, fontWeight:700 }}>
+                          {m.relevance}% relevância
+                        </span>
+                      </div>
+                      <p style={{ margin:0, fontSize:12, color:'#cbd5e1', lineHeight:1.7, fontFamily:"'Lora',serif", fontStyle:'italic' }}>
+                        "{m.excerpt}"
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NotesTab({ catalogo }) {
+  const [notes, setNotes]           = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [showForm, setShowForm]     = useState(false);
+  const [bookId, setBookId]         = useState('');
+  const [content, setContent]       = useState('');
+  const [chapterRef, setChapterRef] = useState('');
+  const [saving, setSaving]         = useState(false);
+  const [editingId, setEditingId]   = useState(null);
+  const [filterBook, setFilterBook] = useState('');
+
+  const cfg = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.get('/notes', cfg());
+      setNotes(res.data || []);
+    } catch { setNotes([]); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const save = async () => {
+    if (!bookId) { alert('Selecione um livro.'); return; }
+    if (!content.trim()) { alert('Escreva o conteúdo da nota.'); return; }
+    setSaving(true);
+    try {
+      if (editingId) {
+        await api.put(`/notes/${editingId}`, { content, chapter_ref: chapterRef ? Number(chapterRef) : null }, cfg());
+      } else {
+        await api.post('/notes', { book_id: Number(bookId), content, chapter_ref: chapterRef ? Number(chapterRef) : null }, cfg());
+      }
+      await load();
+      setShowForm(false); setContent(''); setBookId(''); setChapterRef(''); setEditingId(null);
+    } catch(e) { alert(e.response?.data?.error || 'Erro ao salvar nota.'); }
+    finally { setSaving(false); }
+  };
+
+  const startEdit = (note) => {
+    setEditingId(note.id);
+    setBookId(String(note.book_id));
+    setContent(note.content);
+    setChapterRef(note.chapter_ref ? String(note.chapter_ref) : '');
+    setShowForm(true);
+  };
+
+  const deleteNote = async (id) => {
+    if (!window.confirm('Excluir esta nota?')) return;
+    try { await api.delete(`/notes/${id}`, cfg()); await load(); }
+    catch { alert('Erro ao excluir.'); }
+  };
+
+  const cancelForm = () => {
+    setShowForm(false); setEditingId(null);
+    setContent(''); setBookId(''); setChapterRef('');
+  };
+
+  const booksWithNotes = [...new Set(notes.map(n => n.book_id))];
+  const filtered = filterBook ? notes.filter(n => n.book_id === Number(filterBook)) : notes;
+
+  return (
+    <div className="page-anim">
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:18 }}>
+        <div>
+          <h2 style={{ margin:0, fontSize:20, fontWeight:800 }}>Minhas Notas</h2>
+          <p style={{ margin:'2px 0 0', fontSize:12, color:'#64748b' }}>{notes.length} anotaç{notes.length!==1?'ões':'ão'} privadas</p>
+        </div>
+        <button onClick={() => { setShowForm(s => !s); if (showForm) cancelForm(); }}
+          style={{ ...S.actionBtn }}>
+          {showForm ? <X size={15}/> : <Plus size={15}/>}
+          {showForm ? 'Fechar' : 'Nova nota'}
+        </button>
+      </div>
+
+      {showForm && (
+        <div style={{ background:'#111827', border:'1px solid rgba(99,102,241,.25)', borderRadius:16, padding:18, marginBottom:20, animation:'slideUp .2s ease' }}>
+          <h4 style={{ margin:'0 0 14px', fontSize:13, color:'#a5b4fc' }}>
+            {editingId ? '✏️ Editar nota' : '📝 Nova nota'}
+          </h4>
+
+          <label style={{ fontSize:11, color:'#64748b', fontWeight:700, display:'block', marginBottom:5 }}>LIVRO</label>
+          <select value={bookId} onChange={e=>setBookId(e.target.value)} disabled={!!editingId}
+            style={{ width:'100%', padding:'10px 12px', borderRadius:9, border:'1px solid rgba(255,255,255,.08)',
+              background:'#0f172a', color:bookId?'#e2e8f0':'#475569', fontSize:12, marginBottom:12, outline:'none' }}>
+            <option value="">Selecione o livro…</option>
+            {catalogo.map(b => <option key={b.id} value={b.id}>{b.title}</option>)}
+          </select>
+
+          <label style={{ fontSize:11, color:'#64748b', fontWeight:700, display:'block', marginBottom:5 }}>CAPÍTULO (opcional)</label>
+          <input type="number" min="1" placeholder="Ex: 3"
+            value={chapterRef} onChange={e=>setChapterRef(e.target.value)}
+            style={{ width:'100%', padding:'10px 12px', borderRadius:9, border:'1px solid rgba(255,255,255,.08)',
+              background:'#0f172a', color:'#e2e8f0', fontSize:12, marginBottom:12, outline:'none' }}/>
+
+          <label style={{ fontSize:11, color:'#64748b', fontWeight:700, display:'block', marginBottom:5 }}>ANOTAÇÃO</label>
+          <textarea
+            placeholder="Escreva sua reflexão, citação favorita, análise…"
+            value={content} onChange={e=>setContent(e.target.value)}
+            rows={4}
+            style={{ width:'100%', padding:'10px 12px', borderRadius:9, border:'1px solid rgba(255,255,255,.08)',
+              background:'#0f172a', color:'#e2e8f0', fontSize:13, resize:'vertical', outline:'none', fontFamily:'inherit', marginBottom:14 }}
+          />
+
+          <div style={{ display:'flex', gap:8 }}>
+            <button onClick={save} disabled={saving}
+              style={{ ...S.button, flex:1, padding:'10px' }}>
+              {saving ? <Loader2 size={14} className="spinner"/> : <Check size={14}/>}
+              {saving ? 'Salvando…' : 'Salvar nota'}
+            </button>
+            <button onClick={cancelForm} style={{ ...S.smallBtn, padding:'10px 16px' }}>Cancelar</button>
+          </div>
+        </div>
+      )}
+
+      {booksWithNotes.length > 1 && (
+        <div style={{ marginBottom:14 }}>
+          <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+            <button onClick={() => setFilterBook('')}
+              style={{ fontSize:10, padding:'4px 11px', borderRadius:20, border:'none', cursor:'pointer', fontWeight:700,
+                background: !filterBook ? '#4f46e5' : 'rgba(255,255,255,.07)',
+                color: !filterBook ? '#fff' : '#64748b' }}>
+              Todos
+            </button>
+            {booksWithNotes.map(bid => {
+              const b = catalogo.find(c=>c.id===bid);
+              return (
+                <button key={bid} onClick={() => setFilterBook(String(bid))}
+                  style={{ fontSize:10, padding:'4px 11px', borderRadius:20, border:'none', cursor:'pointer', fontWeight:700,
+                    background: filterBook===String(bid) ? 'rgba(99,102,241,.35)' : 'rgba(255,255,255,.07)',
+                    color: filterBook===String(bid) ? '#a5b4fc' : '#64748b',
+                    maxWidth:120, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                  {b?.title || `Livro #${bid}`}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {loading && (
+        <div style={{ textAlign:'center', padding:'40px 0', color:'#64748b' }}>
+          <Loader2 size={28} className="spinner" style={{ display:'inline' }}/>
+        </div>
+      )}
+
+      {!loading && filtered.length === 0 && (
+        <div style={{ textAlign:'center', padding:'50px 20px', color:'#475569' }}>
+          <StickyNote size={40} color="#1e293b" style={{ marginBottom:14 }}/>
+          <p style={{ fontSize:14, marginBottom:4 }}>Nenhuma nota ainda.</p>
+          <p style={{ fontSize:12 }}>Registre reflexões e citações dos livros que você lê.</p>
+        </div>
+      )}
+
+      {filtered.map(note => {
+        const book = catalogo.find(b => b.id === note.book_id);
+        return (
+          <div key={note.id} style={{ background:'#111827', border:'1px solid rgba(255,255,255,.05)', borderRadius:14, padding:'14px 16px', marginBottom:10 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:10 }}>
+              <div style={{ flex:1, overflow:'hidden' }}>
+                <p style={{ margin:'0 0 2px', fontSize:12, fontWeight:700, color:'#818cf8' }} className="truncate">
+                  {book?.title || `Livro #${note.book_id}`}
+                </p>
+                {note.chapter_ref && (
+                  <span style={{ fontSize:10, color:'#475569' }}>Cap. {note.chapter_ref}</span>
+                )}
+              </div>
+              <div style={{ display:'flex', gap:6, flexShrink:0, marginLeft:8 }}>
+                <button onClick={() => startEdit(note)} style={{ ...S.iconBtn, padding:'5px' }}>
+                  <Edit2 size={11} color="#3b82f6"/>
+                </button>
+                <button onClick={() => deleteNote(note.id)} style={{ ...S.iconBtn, padding:'5px' }}>
+                  <Trash2 size={11} color="#ef4444"/>
+                </button>
+              </div>
+            </div>
+            <p style={{ margin:'0 0 10px', fontSize:13, color:'#cbd5e1', lineHeight:1.7, whiteSpace:'pre-wrap' }}>{note.content}</p>
+            <p style={{ margin:0, fontSize:10, color:'#334155' }}>
+              {new Date(note.updated_at || note.created_at).toLocaleDateString('pt-BR', { day:'2-digit', month:'short', year:'numeric' })}
+            </p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function DictionaryPopup({ word, position, onClose }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -101,9 +582,6 @@ function DictionaryPopup({ word, position, onClose }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// LEITOR DE LIVRO
-// ─────────────────────────────────────────────────────────────────────────────
 function BookReader({ book, onBack }) {
   const [content, setContent]     = useState('');
   const [loading, setLoading]     = useState(true);
@@ -159,7 +637,6 @@ function BookReader({ book, onBack }) {
 
   return (
     <div style={{ display:'flex', flexDirection:'column', height:'100%', background:'#0b1120' }}>
-      {/* Toolbar */}
       <div style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 18px', background:'#0f172a', borderBottom:'1px solid rgba(255,255,255,.06)', flexShrink:0 }}>
         <button onClick={onBack} style={{ ...S.iconBtn, padding:7 }}><ArrowLeft size={18} color="#818cf8"/></button>
         <div style={{ flex:1, overflow:'hidden' }}>
@@ -209,16 +686,13 @@ function BookReader({ book, onBack }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// BUSCA GUTENBERG + STANDARD EBOOKS
-// ─────────────────────────────────────────────────────────────────────────────
 function ExternalSearch({ onImport, onRead }) {
-  const [source, setSource]     = useState('gutenberg'); // 'gutenberg' | 'standard'
-  const [query, setQuery]       = useState('');
-  const [lang, setLang]         = useState('en');
-  const [results, setResults]   = useState([]);
-  const [loading, setLoading]   = useState(false);
-  const [searched, setSearched] = useState(false);
+  const [source, setSource]      = useState('gutenberg');
+  const [query, setQuery]        = useState('');
+  const [lang, setLang]          = useState('en');
+  const [results, setResults]    = useState([]);
+  const [loading, setLoading]    = useState(false);
+  const [searched, setSearched]  = useState(false);
   const [importing, setImporting]= useState(null);
 
   const search = async () => {
@@ -253,7 +727,6 @@ function ExternalSearch({ onImport, onRead }) {
 
   return (
     <div style={{ background:'rgba(99,102,241,.07)', border:'1px solid rgba(99,102,241,.2)', borderRadius:16, padding:16, marginBottom:22 }}>
-      {/* Header fonte */}
       <div style={{ display:'flex', gap:8, marginBottom:12 }}>
         {[['gutenberg','📚 Project Gutenberg'],['standard','⭐ Standard Ebooks']].map(([k,label]) => (
           <button key={k} onClick={() => { setSource(k); setResults([]); setSearched(false); }}
@@ -339,11 +812,8 @@ function ExternalSearch({ onImport, onRead }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ABA CATEGORIAS  (nova, com grade de categorias e lista filtrada)
-// ─────────────────────────────────────────────────────────────────────────────
 function CatalogTab({ catalogo, categorias, abrirLeitor, adicionarAEstante, editarLivro, excluirLivro, criarLivro, carregarDados }) {
-  const [catId, setCatId]   = useState(null);    // null = todas
+  const [catId, setCatId]   = useState(null);
   const [diff, setDiff]     = useState('');
   const [q, setQ]           = useState('');
   const [showSearch, setShowSearch] = useState(false);
@@ -362,7 +832,6 @@ function CatalogTab({ catalogo, categorias, abrirLeitor, adicionarAEstante, edit
 
   return (
     <div className="page-anim">
-      {/* Header */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:18 }}>
         <div>
           <h2 style={{ margin:0, fontSize:20, fontWeight:800 }}>Catálogo</h2>
@@ -374,7 +843,6 @@ function CatalogTab({ catalogo, categorias, abrirLeitor, adicionarAEstante, edit
         </div>
       </div>
 
-      {/* Campo de busca */}
       {showSearch && (
         <div style={{ ...S.inputWrapper, marginBottom:14 }}>
           <Search style={{ ...S.icon, color:'#64748b' }} size={15}/>
@@ -384,23 +852,16 @@ function CatalogTab({ catalogo, categorias, abrirLeitor, adicionarAEstante, edit
         </div>
       )}
 
-      {/* Busca externa */}
       <ExternalSearch onImport={carregarDados} onRead={abrirLeitor}/>
 
-      {/* ── Grade de categorias ── */}
       <h3 style={{ ...S.sectionTitle, margin:'0 0 12px' }}>
         <Filter size={13}/> NAVEGAR POR CATEGORIA
       </h3>
 
-      {/* Botão "Todas" */}
       <button onClick={() => setCatId(null)}
-        style={{
-          display:'flex', alignItems:'center', gap:10, width:'100%',
-          padding:'12px 14px', borderRadius:12, marginBottom:8,
+        style={{ display:'flex', alignItems:'center', gap:10, width:'100%', padding:'12px 14px', borderRadius:12, marginBottom:8,
           border: catId===null ? '1px solid #4f46e5' : '1px solid rgba(255,255,255,.07)',
-          background: catId===null ? 'rgba(99,102,241,.18)' : '#111827',
-          cursor:'pointer', textAlign:'left'
-        }}>
+          background: catId===null ? 'rgba(99,102,241,.18)' : '#111827', cursor:'pointer', textAlign:'left' }}>
         <span style={{ fontSize:20 }}>📚</span>
         <div style={{ flex:1 }}>
           <p style={{ margin:0, fontSize:13, fontWeight:700, color: catId===null ? '#a5b4fc' : '#e2e8f0' }}>Todas as categorias</p>
@@ -409,7 +870,6 @@ function CatalogTab({ catalogo, categorias, abrirLeitor, adicionarAEstante, edit
         {catId===null && <Check size={15} color="#818cf8"/>}
       </button>
 
-      {/* Grade 2 colunas */}
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:20 }}>
         {categorias.map(c => {
           const count = catalogo.filter(b=>b.category_id===c.id).length;
@@ -417,12 +877,9 @@ function CatalogTab({ catalogo, categorias, abrirLeitor, adicionarAEstante, edit
           const icon = CAT_ICONS[c.name] || c.icon || '📖';
           return (
             <button key={c.id} onClick={() => setCatId(active ? null : c.id)} className="cat-tab"
-              style={{
-                display:'flex', alignItems:'center', gap:10, padding:'12px 12px',
-                borderRadius:12, border: active ? '1px solid #4f46e5' : '1px solid rgba(255,255,255,.07)',
-                background: active ? 'rgba(99,102,241,.2)' : '#111827',
-                cursor:'pointer', textAlign:'left'
-              }}>
+              style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 12px', borderRadius:12,
+                border: active ? '1px solid #4f46e5' : '1px solid rgba(255,255,255,.07)',
+                background: active ? 'rgba(99,102,241,.2)' : '#111827', cursor:'pointer', textAlign:'left' }}>
               <span style={{ fontSize:22, flexShrink:0 }}>{icon}</span>
               <div style={{ overflow:'hidden' }}>
                 <p style={{ margin:0, fontSize:11, fontWeight:700, color: active ? '#a5b4fc' : '#e2e8f0', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{c.name}</p>
@@ -433,13 +890,11 @@ function CatalogTab({ catalogo, categorias, abrirLeitor, adicionarAEstante, edit
         })}
       </div>
 
-      {/* ── Lista de livros filtrados ── */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
         <h3 style={{ ...S.sectionTitle, margin:0 }}>
           {catSel ? `${CAT_ICONS[catSel.name]||'📖'} ${catSel.name}` : '📚 Todos os livros'}
           <span style={{ color:'#475569', fontWeight:400, marginLeft:6 }}>({filtered.length})</span>
         </h3>
-        {/* Filtro de dificuldade */}
         <div style={{ display:'flex', gap:4 }}>
           {['','B1','B2','C1','PT-BR'].map(d => (
             <button key={d} onClick={() => setDiff(diff===d?'':d)}
@@ -464,7 +919,6 @@ function CatalogTab({ catalogo, categorias, abrirLeitor, adicionarAEstante, edit
         const temLeitura = !!(livro.gutenberg_id || (livro.cover_url&&livro.cover_url.includes('gutenberg')));
         return (
           <div key={livro.id} style={{ ...S.listCard, marginBottom:10 }}>
-            {/* Capa */}
             <div style={{ width:50, height:68, borderRadius:8, flexShrink:0, background:'#1e293b', overflow:'hidden', display:'flex', alignItems:'center', justifyContent:'center', marginRight:12, border:'1px solid rgba(255,255,255,.06)' }}>
               {livro.cover_url && livro.cover_url.includes('gutenberg.org/cache')
                 ? <img src={livro.cover_url} alt="" style={{ width:'100%', height:'100%', objectFit:'cover' }} onError={e=>{e.target.style.display='none'}}/>
@@ -481,8 +935,7 @@ function CatalogTab({ catalogo, categorias, abrirLeitor, adicionarAEstante, edit
                 <button onClick={() => abrirLeitor({ title:livro.title, author:livro.author, cover_url:livro.cover_url, gutenberg_id:livro.gutenberg_id })}
                   style={{ fontSize:10, padding:'4px 9px', borderRadius:6, border:'none', cursor:'pointer', fontWeight:700,
                     background: temLeitura ? 'rgba(99,102,241,.18)' : 'rgba(255,255,255,.06)',
-                    color: temLeitura ? '#818cf8' : '#475569',
-                    display:'flex', alignItems:'center', gap:3 }}>
+                    color: temLeitura ? '#818cf8' : '#475569', display:'flex', alignItems:'center', gap:3 }}>
                   <BookOpenCheck size={11}/> Ler
                 </button>
                 <button onClick={() => adicionarAEstante(livro.id)} style={{ ...S.iconBtn, padding:'4px 6px' }} title="Estante"><Check size={11} color="#10b981"/></button>
@@ -497,13 +950,10 @@ function CatalogTab({ catalogo, categorias, abrirLeitor, adicionarAEstante, edit
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ABA METAS (RF04)
-// ─────────────────────────────────────────────────────────────────────────────
-function GoalsTab({ minhaLista }) {
-  const [goals, setGoals]       = useState([]);
-  const [loading, setLoading]   = useState(true);
-  const [showForm, setShowForm] = useState(false);
+function GoalsTab() {
+  const [goals, setGoals]             = useState([]);
+  const [loading, setLoading]         = useState(true);
+  const [showForm, setShowForm]       = useState(false);
   const [targetBooks, setTargetBooks] = useState(12);
   const [dailyPages, setDailyPages]   = useState(20);
   const [saving, setSaving]           = useState(false);
@@ -526,20 +976,12 @@ function GoalsTab({ minhaLista }) {
     if (targetBooks < 1) { alert('Meta deve ser de pelo menos 1 livro.'); return; }
     setSaving(true);
     try {
-      await api.post('/goals',
-        { year_goal: currentYear, target_books: targetBooks, daily_pages: dailyPages },
-        getConf()
-      );
-      await load();
-      setShowForm(false);
+      await api.post('/goals', { year_goal: currentYear, target_books: targetBooks, daily_pages: dailyPages }, getConf());
+      await load(); setShowForm(false);
     } catch(e) {
       const data = e.response?.data;
-      const status = e.response?.status;
-      if (status === 401 || data?.code === 'SESSION_EXPIRED') {
-        alert('Sua sessão expirou. Faça login novamente.');
-        localStorage.clear();
-        window.location.reload(); // força volta para tela de login
-        return;
+      if (e.response?.status === 401 || data?.code === 'SESSION_EXPIRED') {
+        alert('Sua sessão expirou. Faça login novamente.'); localStorage.clear(); window.location.reload(); return;
       }
       alert(data?.error || e.message || 'Erro ao salvar meta.');
     } finally { setSaving(false); }
@@ -547,10 +989,8 @@ function GoalsTab({ minhaLista }) {
 
   const markRead = async (goal) => {
     const nova = Math.min(goal.completed_books + 1, goal.target_books);
-    try {
-      await api.put(`/goals/${goal.id}`, { target_books: goal.target_books, completed_books: nova }, getConf());
-      await load();
-    } catch { alert('Erro ao atualizar.'); }
+    try { await api.put(`/goals/${goal.id}`, { target_books: goal.target_books, completed_books: nova }, getConf()); await load(); }
+    catch { alert('Erro ao atualizar.'); }
   };
 
   const deleteGoal = async (id) => {
@@ -558,12 +998,11 @@ function GoalsTab({ minhaLista }) {
     try { await api.delete(`/goals/${id}`, getConf()); await load(); } catch { alert('Erro.'); }
   };
 
-  // year_goal vem do banco como string em alguns drivers — força Number para comparação segura
-  const goalYear = goals.find(g=>Number(g.year_goal)===currentYear);
-  const pct = goalYear ? Math.round((goalYear.completed_books/goalYear.target_books)*100) : 0;
-  const daysLeft = Math.ceil((new Date(currentYear,11,31) - new Date()) / 86400000);
+  const goalYear  = goals.find(g=>Number(g.year_goal)===currentYear);
+  const pct       = goalYear ? Math.round((goalYear.completed_books/goalYear.target_books)*100) : 0;
+  const daysLeft  = Math.ceil((new Date(currentYear,11,31) - new Date()) / 86400000);
   const booksLeft = goalYear ? goalYear.target_books - goalYear.completed_books : 0;
-  const pace = daysLeft > 0 && booksLeft > 0 ? Math.ceil(daysLeft / Math.max(booksLeft, 1)) : null;
+  const pace      = daysLeft > 0 && booksLeft > 0 ? Math.ceil(daysLeft / Math.max(booksLeft, 1)) : null;
 
   return (
     <div className="page-anim">
@@ -578,14 +1017,13 @@ function GoalsTab({ minhaLista }) {
         </button>
       </div>
 
-      {/* Formulário */}
       {showForm && (
         <div style={{ background:'#111827', border:'1px solid rgba(99,102,241,.25)', borderRadius:16, padding:20, marginBottom:20, animation:'slideUp .2s ease' }}>
           <h4 style={{ margin:'0 0 16px', fontSize:14, color:'#a5b4fc' }}>
             {goalYear ? `Editar meta de ${currentYear}` : `Nova meta para ${currentYear}`}
           </h4>
           <div style={{ marginBottom:14 }}>
-            <label style={{ fontSize:12, color:'#94a3b8', display:'block', marginBottom:6 }}>📚 Quantos livros você quer ler em {currentYear}?</label>
+            <label style={{ fontSize:12, color:'#94a3b8', display:'block', marginBottom:6 }}>📚 Quantos livros em {currentYear}?</label>
             <div style={{ display:'flex', alignItems:'center', gap:12 }}>
               <button onClick={()=>setTargetBooks(t=>Math.max(1,t-1))} style={{ ...S.iconBtn, padding:'6px 10px', fontSize:16 }}>−</button>
               <span style={{ fontSize:28, fontWeight:800, color:'#818cf8', minWidth:40, textAlign:'center' }}>{targetBooks}</span>
@@ -614,7 +1052,6 @@ function GoalsTab({ minhaLista }) {
 
       {loading && <div style={{ textAlign:'center', padding:'40px 0', color:'#64748b' }}><Loader2 size={28} className="spinner" style={{ display:'inline' }}/></div>}
 
-      {/* Meta do ano atual */}
       {!loading && goalYear && (
         <div style={{ background:'linear-gradient(135deg,#1e1b4b,#2e1065)', borderRadius:20, padding:22, marginBottom:18, border:'1px solid rgba(99,102,241,.3)' }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:16 }}>
@@ -627,20 +1064,11 @@ function GoalsTab({ minhaLista }) {
               <p style={{ margin:0, fontSize:10, color:'#64748b' }}>concluído</p>
             </div>
           </div>
-
-          {/* Barra de progresso */}
           <div style={{ background:'rgba(255,255,255,.08)', borderRadius:99, height:10, marginBottom:14, overflow:'hidden' }}>
-            <div className="progress-bar-fill" style={{ height:'100%', borderRadius:99, width:`${pct}%`,
-              background:'linear-gradient(to right,#6366f1,#a855f7)' }}/>
+            <div className="progress-bar-fill" style={{ height:'100%', borderRadius:99, width:`${pct}%`, background:'linear-gradient(to right,#6366f1,#a855f7)' }}/>
           </div>
-
-          {/* Estatísticas */}
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, marginBottom:16 }}>
-            {[
-              { label:'Lidos', val: goalYear.completed_books, icon:'✅' },
-              { label:'Faltam', val: Math.max(0,booksLeft), icon:'📖' },
-              { label:'Dias restantes', val: daysLeft, icon:'📅' },
-            ].map(item => (
+            {[{ label:'Lidos', val:goalYear.completed_books, icon:'✅' }, { label:'Faltam', val:Math.max(0,booksLeft), icon:'📖' }, { label:'Dias restantes', val:daysLeft, icon:'📅' }].map(item => (
               <div key={item.label} style={{ background:'rgba(0,0,0,.25)', borderRadius:12, padding:'10px 8px', textAlign:'center' }}>
                 <p style={{ margin:0, fontSize:16 }}>{item.icon}</p>
                 <p style={{ margin:'4px 0 0', fontSize:18, fontWeight:800, color:'#e2e8f0' }}>{item.val}</p>
@@ -648,7 +1076,6 @@ function GoalsTab({ minhaLista }) {
               </div>
             ))}
           </div>
-
           {pace && booksLeft>0 && (
             <div style={{ background:'rgba(99,102,241,.12)', borderRadius:10, padding:'10px 14px', marginBottom:14 }}>
               <p style={{ margin:0, fontSize:12, color:'#a5b4fc' }}>
@@ -656,17 +1083,14 @@ function GoalsTab({ minhaLista }) {
               </p>
             </div>
           )}
-
           {pct>=100 && (
             <div style={{ background:'rgba(16,185,129,.12)', borderRadius:10, padding:'10px 14px', marginBottom:14 }}>
               <p style={{ margin:0, fontSize:13, color:'#10b981', fontWeight:700 }}>🎉 Meta atingida! Parabéns!</p>
             </div>
           )}
-
           <div style={{ display:'flex', gap:8 }}>
-            <button onClick={() => markRead(goalYear)}
-              disabled={goalYear.completed_books>=goalYear.target_books}
-              style={{ ...S.smallBtn, flex:1, background:'rgba(16,185,129,.15)', color:'#10b981', border:'1px solid rgba(16,185,129,.25)', opacity: goalYear.completed_books>=goalYear.target_books ? .5 : 1 }}>
+            <button onClick={() => markRead(goalYear)} disabled={goalYear.completed_books>=goalYear.target_books}
+              style={{ ...S.smallBtn, flex:1, background:'rgba(16,185,129,.15)', color:'#10b981', border:'1px solid rgba(16,185,129,.25)', opacity:goalYear.completed_books>=goalYear.target_books ? .5 : 1 }}>
               <Check size={13} style={{ marginRight:4 }}/> +1 livro lido
             </button>
             <button onClick={() => deleteGoal(goalYear.id)}
@@ -677,11 +1101,10 @@ function GoalsTab({ minhaLista }) {
         </div>
       )}
 
-      {/* Metas de outros anos */}
-      {!loading && goals.filter(g=>g.year_goal!==currentYear).length > 0 && (
+      {!loading && goals.filter(g=>Number(g.year_goal)!==currentYear).length > 0 && (
         <div>
           <h3 style={{ ...S.sectionTitle, marginBottom:12 }}>HISTÓRICO</h3>
-          {goals.filter(g=>g.year_goal!==currentYear).map(g => {
+          {goals.filter(g=>Number(g.year_goal)!==currentYear).map(g => {
             const p = Math.round((g.completed_books/g.target_books)*100);
             return (
               <div key={g.id} style={{ ...S.listCard, flexDirection:'column', gap:8, marginBottom:10 }}>
@@ -693,7 +1116,7 @@ function GoalsTab({ minhaLista }) {
                   {p>=100 ? <Trophy size={18} color="#fbbf24"/> : <TrendingUp size={18} color="#64748b"/>}
                 </div>
                 <div style={{ background:'rgba(255,255,255,.06)', borderRadius:99, height:6, overflow:'hidden' }}>
-                  <div style={{ height:'100%', borderRadius:99, width:`${Math.min(p,100)}%`, background: p>=100?'#10b981':'#4f46e5' }}/>
+                  <div style={{ height:'100%', borderRadius:99, width:`${Math.min(p,100)}%`, background:p>=100?'#10b981':'#4f46e5' }}/>
                 </div>
               </div>
             );
@@ -705,7 +1128,6 @@ function GoalsTab({ minhaLista }) {
         <div style={{ textAlign:'center', padding:'50px 20px' }}>
           <Target size={48} color="#1e293b" style={{ marginBottom:16 }}/>
           <p style={{ color:'#64748b', fontSize:14, marginBottom:6 }}>Nenhuma meta definida ainda.</p>
-          <p style={{ color:'#475569', fontSize:12 }}>Crie sua primeira meta de leitura para {currentYear}!</p>
           <button onClick={()=>setShowForm(true)} style={{ ...S.button, marginTop:20, padding:'10px 24px', width:'auto' }}>
             <Plus size={15}/> Criar meta
           </button>
@@ -715,9 +1137,6 @@ function GoalsTab({ minhaLista }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// APP PRINCIPAL
-// ─────────────────────────────────────────────────────────────────────────────
 function App() {
   const [user, setUser]             = useState(null);
   const [isLogin, setIsLogin]       = useState(true);
@@ -728,11 +1147,12 @@ function App() {
   const [password, setPassword]     = useState('');
   const [showPassword, setShowPwd]  = useState(false);
 
-  const [currentTab, setCurrentTab] = useState('inicio');
-  const [catalogo, setCatalogo]     = useState([]);
-  const [minhaLista, setMinhaLista] = useState([]);
-  const [categorias, setCategorias] = useState([]);
-  const [readingBook, setReadingBook]= useState(null);
+  const [currentTab, setCurrentTab]  = useState('inicio');
+  const [catalogo, setCatalogo]      = useState([]);
+  const [minhaLista, setMinhaLista]  = useState([]);
+  const [categorias, setCategorias]  = useState([]);
+  const [readingBook, setReadingBook] = useState(null);
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
 
   useEffect(() => {
     const u = localStorage.getItem('userName');
@@ -743,14 +1163,16 @@ function App() {
   const carregarDados = useCallback(async () => {
     try {
       const cfg = { headers:{ Authorization:`Bearer ${localStorage.getItem('token')}` } };
-      const [rB,rL,rC] = await Promise.all([
+      const [rB,rL,rC,rPref] = await Promise.all([
         api.get('/books', cfg),
         api.get('/progress', cfg),
         api.get('/categories', cfg),
+        api.get('/ai/preferences', cfg).catch(() => ({ data: { onboarding_done: true } })),
       ]);
       if (rB.data) setCatalogo(rB.data);
       if (rL.data) setMinhaLista(rL.data);
       if (rC.data) setCategorias(rC.data);
+      if (rPref.data?.onboarding_done === false) setNeedsOnboarding(true);
     } catch(e) { console.warn('carregarDados:', e.message); }
   }, []);
 
@@ -759,30 +1181,35 @@ function App() {
   const handleAuth = async (e) => {
     e.preventDefault(); setLoading(true); setMessage({ text:'', type:'' });
     try {
-      if (isLogin) {
-        const r = await api.post('/auth/login', { email, password });
-        localStorage.setItem('token', r.data.token);
-        localStorage.setItem('userName', r.data.user.name);
-        setMessage({ text:'Bem-vindo!', type:'success' });
-        setTimeout(() => setUser({ name:r.data.user.name, initials:r.data.user.name.substring(0,2).toUpperCase() }), 900);
-      } else {
-        await api.post('/auth/register', { name, email, password });
-        setMessage({ text:'Conta criada! Faça login.', type:'success' }); setIsLogin(true);
-      }
+        if (isLogin) {
+            const r = await api.post('/auth/login', { email, password });
+            localStorage.setItem('token', r.data.token);
+            localStorage.setItem('userName', r.data.user.name);
+            setMessage({ text:'Bem-vindo!', type:'success' });
+            setTimeout(() => setUser({ name:r.data.user.name, initials:r.data.user.name.substring(0,2).toUpperCase() }), 900);
+        } else {
+            const r = await api.post('/auth/register', { name, email, password });
+            // ✅ Faz login automático após registro e abre onboarding
+            const login = await api.post('/auth/login', { email, password });
+            localStorage.setItem('token', login.data.token);
+            localStorage.setItem('userName', login.data.user.name);
+            setNeedsOnboarding(true);
+            setUser({ name: login.data.user.name, initials: login.data.user.name.substring(0,2).toUpperCase() });
+        }
     } catch(e) { setMessage({ text:e.response?.data?.message||'Erro na conexão.', type:'error' }); }
     finally { setLoading(false); }
-  };
+};
 
-  const handleLogout = () => { localStorage.clear(); setUser(null); setCurrentTab('inicio'); setReadingBook(null); };
+  const handleLogout = () => {
+    localStorage.clear(); setUser(null); setCurrentTab('inicio');
+    setReadingBook(null); setNeedsOnboarding(false);
+  };
   const cfg = () => ({ headers:{ Authorization:`Bearer ${localStorage.getItem('token')}` } });
 
-  // Detecta sessão expirada em qualquer resposta de erro e faz logout automático
   const handleApiError = (e, msgFallback) => {
     const data = e.response?.data;
     if (e.response?.status === 401 || data?.code === 'SESSION_EXPIRED') {
-      alert('Sua sessão expirou. Faça login novamente.');
-      handleLogout();
-      return;
+      alert('Sua sessão expirou. Faça login novamente.'); handleLogout(); return;
     }
     alert(data?.error || msgFallback || e.message);
   };
@@ -804,12 +1231,10 @@ function App() {
     try {
       await api.post('/progress', { book_id: bookId, current_chapter: 1 }, cfg());
       carregarDados();
+       alert('Livro adicionado à sua estante! ✅');
     } catch(e) {
-      if (e.response?.status === 409) {
-        alert('Este livro já está na sua estante!');
-      } else {
-        handleApiError(e, 'Erro ao adicionar à estante.');
-      }
+      if (e.response?.status === 409) alert('Este livro já está na sua estante!');
+      else handleApiError(e, 'Erro ao adicionar à estante.');
     }
   };
   const atualizarCapitulo = async (bookId, cap) => {
@@ -841,13 +1266,22 @@ function App() {
     </div>
   );
 
-  // Leitor tela cheia
   if (readingBook) return (
     <>
       <GlobalStyle/>
       <div style={{ ...S.appContainer, flexDirection:'column' }}>
         <BookReader book={readingBook} onBack={() => setReadingBook(null)}/>
       </div>
+    </>
+  );
+
+  if (user && needsOnboarding) return (
+    <>
+      <GlobalStyle/>
+      <OnboardingScreen
+        onFinish={() => { setNeedsOnboarding(false); carregarDados(); }}
+        onSkip={() => setNeedsOnboarding(false)}
+      />
     </>
   );
 
@@ -863,7 +1297,6 @@ function App() {
             <div style={S.avatar}>{user.initials}</div>
           </header>
 
-          {/* Streak */}
           <div style={S.streakCard}>
             <div style={{ display:'flex', alignItems:'center', gap:14 }}>
               <Flame size={28} color="#f97316" fill="#f97316"/>
@@ -874,7 +1307,6 @@ function App() {
             </div>
           </div>
 
-          {/* Destaques */}
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
             <h3 style={{ ...S.sectionTitle, marginBottom:0 }}><Sparkles size={13} color="#fbbf24"/> DESTAQUES</h3>
             <button onClick={()=>setCurrentTab('catalogo')} style={{ background:'none', border:'none', color:'#818cf8', fontSize:12, fontWeight:700, cursor:'pointer' }}>Ver tudo →</button>
@@ -893,7 +1325,6 @@ function App() {
             ))}
           </div>
 
-          {/* Continue lendo */}
           <h3 style={{ ...S.sectionTitle, marginTop:22 }}>CONTINUE LENDO</h3>
           {minhaLista.length===0
             ? <p style={{ color:'#475569', fontSize:13 }}>Adicione livros do catálogo para começar!</p>
@@ -916,13 +1347,10 @@ function App() {
       );
 
       case 'catalogo': return (
-        <CatalogTab
-          catalogo={catalogo} categorias={categorias}
-          abrirLeitor={setReadingBook}
-          adicionarAEstante={adicionarAEstante}
+        <CatalogTab catalogo={catalogo} categorias={categorias}
+          abrirLeitor={setReadingBook} adicionarAEstante={adicionarAEstante}
           editarLivro={editarLivro} excluirLivro={excluirLivro}
-          criarLivro={criarLivro} carregarDados={carregarDados}
-        />
+          criarLivro={criarLivro} carregarDados={carregarDados}/>
       );
 
       case 'estante': return (
@@ -969,7 +1397,9 @@ function App() {
         </div>
       );
 
-      case 'metas': return <GoalsTab minhaLista={minhaLista}/>;
+      case 'metas': return <GoalsTab/>;
+      case 'notas': return <NotesTab catalogo={catalogo}/>;
+      case 'ia':    return <AITab catalogo={catalogo}/>;
 
       case 'perfil': return (
         <div className="page-anim">
@@ -978,7 +1408,7 @@ function App() {
             <h2 style={{ margin:0, fontSize:20 }}>{user.name}</h2>
             <p style={{ color:'#64748b', margin:'4px 0 0', fontSize:13 }}>Membro do Elegere</p>
           </div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:32 }}>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:20 }}>
             {[
               { label:'Na estante', val:minhaLista.length, icon:'📚' },
               { label:'Categorias', val:categorias.length, icon:'🏷️' },
@@ -990,6 +1420,10 @@ function App() {
               </div>
             ))}
           </div>
+          <button onClick={() => setNeedsOnboarding(true)}
+            style={{ ...S.smallBtn, width:'100%', marginBottom:12, padding:'11px', justifyContent:'center', gap:6 }}>
+            <Sparkles size={13} color="#818cf8"/> Atualizar preferências literárias
+          </button>
           <button onClick={handleLogout}
             style={{ ...S.button, width:'100%', background:'rgba(239,68,68,.12)', border:'1px solid rgba(239,68,68,.35)', color:'#ef4444' }}>
             <LogOut size={17}/> Sair da conta
@@ -1060,19 +1494,21 @@ function App() {
         <div style={S.contentArea}>{renderTab()}</div>
         <nav style={S.bottomNav}>
           {[
-            { id:'inicio',   icon:<Home size={21}/>,    label:'Início'   },
-            { id:'catalogo', icon:<Library size={21}/>, label:'Catálogo' },
-            { id:'estante',  icon:<BookOpen size={21}/>,label:'Estante'  },
-            { id:'metas',    icon:<Target size={21}/>,  label:'Metas'    },
-            { id:'perfil',   icon:<User size={21}/>,    label:'Perfil'   },
+            { id:'inicio',   icon:<Home size={19}/>,        label:'Início'   },
+            { id:'catalogo', icon:<Library size={19}/>,     label:'Catálogo' },
+            { id:'estante',  icon:<BookOpen size={19}/>,    label:'Estante'  },
+            { id:'notas',    icon:<StickyNote size={19}/>,  label:'Notas'    },
+            { id:'ia',       icon:<Bot size={19}/>,         label:'IA'       },
+            { id:'metas',    icon:<Target size={19}/>,      label:'Metas'    },
+            { id:'perfil',   icon:<User size={19}/>,        label:'Perfil'   },
           ].map(tab => (
             <div key={tab.id} onClick={()=>setCurrentTab(tab.id)}
-              style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:5, cursor:'pointer',
+              style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:3, cursor:'pointer',
                 color: currentTab===tab.id ? '#818cf8' : '#475569',
-                fontSize:10, fontWeight: currentTab===tab.id ? 700 : 400,
-                padding:'4px 8px', borderRadius:10,
+                fontSize:9, fontWeight: currentTab===tab.id ? 700 : 400,
+                padding:'4px 6px', borderRadius:10,
                 background: currentTab===tab.id ? 'rgba(99,102,241,.12)' : 'transparent',
-                transition:'color .15s,background .15s' }}>
+                transition:'color .15s,background .15s', minWidth:40 }}>
               {tab.icon}
               <span>{tab.label}</span>
             </div>
@@ -1101,7 +1537,7 @@ const S = {
   smallBtn:        { background:'#1e293b', color:'#e2e8f0', border:'none', padding:'7px 11px', borderRadius:7, fontSize:11, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700 },
   button:          { padding:'13px', background:'linear-gradient(to right,#6366f1,#a855f7)', color:'#fff', border:'none', borderRadius:12, fontSize:15, fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:8 },
   readButton:      { background:'rgba(99,102,241,.18)', color:'#a5b4fc', border:'none', padding:'6px 12px', borderRadius:20, cursor:'pointer', fontWeight:700, display:'flex', alignItems:'center', fontSize:12 },
-  bottomNav:       { position:'absolute', bottom:0, left:0, right:0, height:72, background:'#0f172a', display:'flex', justifyContent:'space-around', alignItems:'center', borderTop:'1px solid rgba(255,255,255,.05)', padding:'0 4px' },
+  bottomNav:       { position:'absolute', bottom:0, left:0, right:0, height:72, background:'#0f172a', display:'flex', justifyContent:'space-around', alignItems:'center', borderTop:'1px solid rgba(255,255,255,.05)', padding:'0 2px' },
   authContainer:   { display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', minHeight:'100vh', background:'linear-gradient(135deg,#0f172a,#1e1b4b)', padding:20 },
   bookmark:        { width:46, height:64, background:'#6366f1', display:'flex', alignItems:'center', justifyContent:'center', borderRadius:'0 0 8px 8px', marginBottom:-18, zIndex:10 },
   authCard:        { background:'rgba(255,255,255,.03)', backdropFilter:'blur(12px)', padding:'36px 28px', borderRadius:26, border:'1px solid rgba(255,255,255,.09)', width:'100%', maxWidth:400 },

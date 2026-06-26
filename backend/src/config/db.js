@@ -9,7 +9,7 @@ const pool = new Pool({
     port: process.env.DB_PORT,
 });
 
-const criarTabelaLocal = async () => {
+const initDB = async () => {
     try {
         await pool.query(`
             CREATE TABLE IF NOT EXISTS users (
@@ -17,15 +17,20 @@ const criarTabelaLocal = async () => {
                 name VARCHAR(100) NOT NULL,
                 email VARCHAR(100) UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
+                onboarding_done BOOLEAN DEFAULT FALSE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
-        console.log(" Conexão Local OK: Tabela 'users' verificada!");
+        await pool.query(`
+            ALTER TABLE users 
+            ADD COLUMN IF NOT EXISTS onboarding_done BOOLEAN DEFAULT FALSE;
+        `);
+        console.log("Banco OK: tabela 'users' verificada!");
     } catch (err) {
-        console.error(" Erro ao conectar no banco local ou criar tabela:", err.message);
+        console.error("Erro ao inicializar banco:", err.message);
     }
 };
 
-criarTabelaLocal();
+initDB();
 
 module.exports = pool;

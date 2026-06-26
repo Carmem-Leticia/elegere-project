@@ -44,23 +44,24 @@ const progressController = {
         }
     },
 
-    async getMyLibrary(req, res) {
-        try {
-            const user_id = req.user?.id;
-            const result = await pool.query(`
-                SELECT b.id as book_id, b.title, b.author, b.cover_url, b.gutenberg_id,
-                       ub.current_chapter, ub.status, ub.id as progress_id
-                FROM user_books ub
-                JOIN books b ON ub.book_id = b.id
-                WHERE ub.user_id = $1
-                ORDER BY ub.id DESC
-            `, [user_id]);
-            res.json(result.rows);
-        } catch(err) {
-            console.error('[getMyLibrary] erro:', err.message);
-            res.status(500).json({ error: 'Erro ao buscar biblioteca.' });
-        }
-    },
+async getMyLibrary(req, res) {
+    try {
+        const user_id = req.user?.id;
+        const result = await pool.query(`
+            SELECT b.id as book_id, b.title, b.author, b.cover_url, 
+                   b.gutenberg_id, b.language,
+                   ub.current_chapter, ub.status, ub.id as progress_id
+            FROM user_books ub
+            JOIN books b ON ub.book_id = b.id
+            WHERE ub.user_id = $1
+            ORDER BY ub.id DESC
+        `, [user_id]);
+        res.json(result.rows);
+    } catch(err) {
+        console.error('[getMyLibrary] erro:', err.message);
+        res.status(500).json({ error: 'Erro ao buscar biblioteca.' });
+    }
+},
 
     async updateProgress(req, res) {
         try {

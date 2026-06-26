@@ -10,6 +10,8 @@ const reviewRoutes   = require('./src/routes/reviewRoutes');
 const userRoutes     = require('./src/routes/userRoutes');
 const libraryRoutes  = require('./src/routes/libraryRoutes');
 const goalRoutes     = require('./src/routes/goalRoutes');
+const aiRoutes = require('./src/routes/aiRoutes');
+const noteRoutes = require('./src/routes/noteRoutes');
 
 const app = express();
 app.use(cors());
@@ -23,6 +25,8 @@ app.use('/api/reviews',   reviewRoutes);
 app.use('/api/users',     userRoutes);
 app.use('/api/library',   libraryRoutes);
 app.use('/api/goals',     goalRoutes);
-
+app.use('/api/ai', aiRoutes);
+app.use('/api/notes', noteRoutes);
+ 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`Elegere rodando em http://localhost:${PORT}`));

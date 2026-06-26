@@ -5,9 +5,6 @@ const bookController = {
         try {
             const { title, author, difficulty_level, category_id, cover_url } = req.body;
 
-            // Antes não havia validação aqui: title/author ausentes faziam o
-            // INSERT estourar uma violação de NOT NULL no banco, retornando um
-            // 500 genérico em vez de uma mensagem clara para quem chamou a API.
             if (!title || !author) {
                 return res.status(400).json({ error: "Título e autor são obrigatórios." });
             }
